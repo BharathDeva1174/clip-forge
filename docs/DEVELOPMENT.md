@@ -165,7 +165,7 @@ npm run dev                         # dev server
 npm run build                       # production build
 npm run start                       # serve the production build
 npm run lint                        # ESLint
-npm run typecheck                   # tsc --noEmit
+npm run typecheck                   # next typegen && tsc --noEmit
 npm test                            # Vitest, single run
 npm run test:watch                  # Vitest, watch mode
 npm run test -- health              # Vitest, filtered by file name

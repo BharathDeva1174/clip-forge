@@ -208,7 +208,7 @@ python -m pytest
 Frontend (from `frontend/`):
 
 ```powershell
-npm run typecheck   # tsc --noEmit
+npm run typecheck   # next typegen && tsc --noEmit
 npm run lint        # ESLint
 npm test            # Vitest (unit + component)
 npm run build       # production build

@@ -289,7 +289,53 @@ tab. Targeted inspection of the active tab showed "Backend online", and the
 backend log confirmed the request. No product defect — but the same symptom
 would look like a hang, so it is recorded here.
 
-### 4.5 Shutdown
+### 4.5 Fresh-clone setup verification
+
+The repository was cloned to a scratch directory and the setup steps from the
+README were executed from scratch, to confirm the documented instructions are
+complete on a clean checkout.
+
+```
+git clone <repo> clipforge-verify
+
+cd clipforge-verify\backend
+python -m venv ..\.venv
+..\.venv\Scripts\python.exe -m pip install --upgrade pip
+..\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt -c constraints.txt
+..\.venv\Scripts\python.exe -m pytest
+```
+
+```
+16 passed in 0.15s
+```
+
+```
+cd ..\frontend
+npm install
+npm run typecheck   -> exit 0
+npm run lint        -> exit 0
+npm test            -> Test Files 2 passed (2), Tests 8 passed (8)
+npm run build       -> Route (app) / and /_not-found, prerendered as static content
+```
+
+**This check found a real defect.** On the first attempt `npm run typecheck`
+failed on the clean checkout with:
+
+```
+src/app/layout.tsx(31,50): error TS2304: Cannot find name 'LayoutProps'.
+```
+
+`LayoutProps<"/">` is a Next.js 16 type helper generated into `.next/types` by
+`next typegen` (or by a build). A fresh clone has no `.next` directory, so the
+type check failed before any build had run — while `npm run build`, which
+generates the types itself, passed. The check had passed in the working
+directory only because an earlier build had left `.next/types` behind.
+
+**Fix:** the script is now `"typecheck": "next typegen && tsc --noEmit"`.
+Re-verified on the clean clone with `.next` deleted first: exit 0, and the
+whole suite (typecheck, lint, test, build) passes from a fresh checkout.
+
+### 4.6 Shutdown
 
 Both processes were stopped. Verified afterwards:
 
@@ -334,7 +380,7 @@ Full reasoning is in [docs/DECISIONS.md](docs/DECISIONS.md). The short list:
 | 7 | Frontend renders without requiring a live backend | **PASS** | With the backend stopped the page renders in full and shows the failure state, not an error page (§4.4) |
 | 8 | Frontend connection indicator handles success and failure | **PASS** | 3 component tests (loading, online, failure + retry recovery); plus live browser verification of all three states in §4.4 |
 | 9 | Backend tests pass | **PASS** | `16 passed in 0.11s` |
-| 10 | Frontend type checking and linting pass | **PASS** | `npm run typecheck` and `npm run lint` — exit 0, no output |
+| 10 | Frontend type checking and linting pass | **PASS** | `npm run typecheck` and `npm run lint` — exit 0, no output. Verified again on a fresh clone after the `next typegen` fix (§4.5) |
 | 11 | Frontend production build passes | **PASS** | `next build` — compiled, type-checked, 2 static routes; `npm run start` served it correctly |
 | 12 | Both services run locally | **PASS** | Both started and stopped cleanly; verified down afterwards |
 | 13 | HTTP integration checks pass | **PASS** | 8 live checks in §4.3, all as expected |
@@ -380,6 +426,11 @@ Full reasoning is in [docs/DECISIONS.md](docs/DECISIONS.md). The short list:
    localhost.
 10. **The `.openchamber/` screenshot folder** is left in the working tree for
     inspection; it is git-ignored.
+11. **`npm run typecheck` depends on `next typegen`.** The generated route
+    types are not committed (they live in the git-ignored `.next/`), so the
+    script regenerates them first. A developer running bare `tsc --noEmit`
+    instead of `npm run typecheck` on a clean checkout will see
+    `Cannot find name 'LayoutProps'`.
 
 ---
 
@@ -389,12 +440,9 @@ None are required for the acceptance criteria. Optional follow-ups:
 
 1. Re-run the whole suite on **Node 22 or 24 LTS** to confirm parity with the
    declared support range.
-2. Run the integration check from a **fresh clone** to confirm the
-   documented setup steps are complete:
-   `git clone → python -m venv → pip install -r requirements-dev.txt → npm install → npm test`.
-3. Decide the **speech-to-text engine** (Phase 3) and the **LLM provider**
+2. Decide the **speech-to-text engine** (Phase 3) and the **LLM provider**
    (Phase 4) — the two open choices that shape the pipeline.
-4. Add `mypy`/`ruff` to the backend if static analysis is wanted before the
+3. Add `mypy`/`ruff` to the backend if static analysis is wanted before the
    pipeline grows.
 
 ---

@@ -130,10 +130,15 @@ they are deterministic and never touch the network.
 Run from `clipforge\frontend\`:
 
 ```powershell
-npm run typecheck   # tsc --noEmit
+npm run typecheck   # next typegen && tsc --noEmit
 npm run lint        # ESLint (flat config, eslint-config-next)
 npm run build       # production build
 ```
+
+`npm run typecheck` runs `next typegen` first. Next.js 16 generates the
+`LayoutProps`/`PageProps` route types into `.next/types`, and they do not exist
+in a fresh clone — without `typegen` the type check fails on a clean checkout
+with `Cannot find name 'LayoutProps'`.
 
 `npm run build` also runs TypeScript over the project, so it covers the type
 check as well. `next lint` no longer exists in Next.js 16 — ESLint runs
