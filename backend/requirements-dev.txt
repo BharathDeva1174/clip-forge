@@ -1,0 +1,10 @@
+# ClipForge API development and test dependencies.
+# Install with:  pip install -r requirements-dev.txt
+# Includes the runtime dependencies.
+#
+# httpx2 is the HTTPX 2.x distribution that Starlette's TestClient expects.
+
+-r requirements.txt
+
+pytest==9.1.1
+httpx2==2.15.1

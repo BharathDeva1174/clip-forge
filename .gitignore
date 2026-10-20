@@ -1,0 +1,55 @@
+# --- Secrets and local configuration ---------------------------------------
+# Real environment files are never committed; only the *.example templates are.
+.env
+.env.*
+!.env.example
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- Node.js / Next.js ------------------------------------------------------
+node_modules/
+.next/
+out/
+build/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- ClipForge runtime data (created from Phase 2 onwards) ------------------
+# Source videos, generated clips, subtitles, caches and the SQLite database.
+backend/data/
+data/
+storage/
+uploads/
+media/
+clips/
+*.db
+*.sqlite
+*.sqlite3
+*.srt
+*.ass
+*.vtt
+
+# --- Editors and tooling artefacts -----------------------------------------
+.vscode/
+.idea/
+.openchamber/
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,19 @@
+# Normalise line endings so the repository stores LF and every platform
+# checks out the same bytes. Matches .editorconfig.
+
+* text=auto eol=lf
+
+# Binary assets
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.webp binary
+*.mp4 binary
+*.mov binary
+*.mp3 binary
+*.wav binary
+*.sqlite binary
+*.sqlite3 binary
+*.db binary

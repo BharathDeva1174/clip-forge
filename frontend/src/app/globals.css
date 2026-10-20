@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@theme {
+  --color-canvas: #0a0b0d;
+  --color-surface: #121418;
+  --color-raised: #191c21;
+  --color-line: #272b32;
+  --color-line-strong: #363b44;
+  --color-ink: #edeff3;
+  --color-ink-muted: #98a0ac;
+  --color-ink-faint: #6d7581;
+  --color-ember-300: #ffc38a;
+  --color-ember-400: #ff9f45;
+  --color-ember-500: #ff7a18;
+  --color-ember-600: #dd5f00;
+  --color-ok: #3ddc97;
+  --color-warn: #ffc453;
+  --color-bad: #ff5f6b;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-ember-500) 35%, transparent);
+  }
+}
+
+.hero-glow {
+  background-image:
+    radial-gradient(
+      55% 50% at 18% 0%,
+      rgba(255, 122, 24, 0.18),
+      transparent 70%
+    ),
+    radial-gradient(
+      40% 38% at 88% 6%,
+      rgba(61, 220, 151, 0.08),
+      transparent 70%
+    );
+}
