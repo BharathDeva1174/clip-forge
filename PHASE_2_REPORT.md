@@ -256,7 +256,39 @@ Checked in a real browser against the dev server.
 | The pipeline preview | Step 1 shows **Done**, step 2 shows **Next up** |
 | Desktop 1440×900 and mobile 390×844 | Both layouts render correctly |
 
-### 4.7 Shutdown
+### 4.8 Fresh-clone setup verification
+
+The repository was cloned to a scratch directory and the setup steps from the
+README were executed from scratch, to confirm the documented instructions are
+complete on a clean checkout.
+
+```
+git clone <repo> clipforge-verify
+
+cd clipforge-verify\backend
+python -m venv ..\.venv
+..\.venv\Scripts\python.exe -m pip install --upgrade pip
+..\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt -c constraints.txt
+..\.venv\Scripts\python.exe -m pytest
+```
+
+```
+190 passed, 1 skipped in 8.05s
+```
+
+```
+cd ..\frontend
+npm install
+npm run typecheck   -> exit 0
+npm run lint        -> exit 0
+npm test            -> Test Files 4 passed (4), Tests 25 passed (25)
+npm run build       -> Route (app) / and /_not-found, prerendered as static content
+```
+
+No defect was found this time. The same check in Phase 1 did find one — the
+missing `next typegen` step — which is why it was repeated.
+
+### 4.9 Shutdown
 
 The API, the worker and the frontend were stopped. Verified afterwards:
 
@@ -422,16 +454,11 @@ None are required for the acceptance criteria. Optional follow-ups:
 
 1. Re-run the whole suite on **Node 22 or 24 LTS** to confirm parity with the
    declared support range.
-2. Re-run the suite from a **fresh clone** — `git clone`, `pip install -r
-   requirements-dev.txt`, `npm install` — to confirm the documented setup is
-   complete on a clean checkout. This was done in Phase 1 and found a real
-   defect there (`next typegen`); it is worth repeating now that two
-   dependencies were added.
-3. Decide the **speech-to-text engine** (Phase 3) and the **LLM provider**
+2. Decide the **speech-to-text engine** (Phase 3) and the **LLM provider**
    (Phase 4) — the two open choices that shape the pipeline.
-4. Add `mypy`/`ruff` to the backend if static analysis is wanted before the
+3. Add `mypy`/`ruff` to the backend if static analysis is wanted before the
    pipeline grows.
-5. Consider a disk-space check before a download, if the local machine tends
+4. Consider a disk-space check before a download, if the local machine tends
    to run out of space.
 
 ---
