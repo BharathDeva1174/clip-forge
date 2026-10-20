@@ -3,7 +3,7 @@ type PipelineStep = {
   title: string;
   body: string;
   phase: string;
-  next?: boolean;
+  state?: "done" | "next";
 };
 
 const STEPS: PipelineStep[] = [
@@ -12,13 +12,14 @@ const STEPS: PipelineStep[] = [
     title: "Ingest",
     body: "Point ClipForge at a local video file, or a YouTube URL you are authorised to access.",
     phase: "Phase 2",
-    next: true,
+    state: "done",
   },
   {
     id: 2,
     title: "Transcribe",
     body: "Pull the audio track out of the video and turn the speech into a timed transcript.",
     phase: "Phase 3",
+    state: "next",
   },
   {
     id: 3,
@@ -55,7 +56,11 @@ export default function PipelinePreview() {
             >
               {step.id}
             </span>
-            {step.next ? (
+            {step.state === "done" ? (
+              <span className="rounded-full border border-ok/40 bg-ok/10 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ok uppercase">
+                Done
+              </span>
+            ) : step.state === "next" ? (
               <span className="rounded-full border border-ember-500/40 bg-ember-500/10 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ember-300 uppercase">
                 Next up
               </span>

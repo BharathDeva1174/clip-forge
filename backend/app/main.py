@@ -5,6 +5,9 @@ Run locally with::
     python -m uvicorn app.main:app --reload
 
 or, from the ``backend`` directory, ``python run.py``.
+
+The background worker that actually processes the queued jobs lives in
+``backend/worker.py`` and runs as its own process.
 """
 
 from __future__ import annotations
@@ -14,22 +17,28 @@ import time
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import API_STAGE, API_VERSION, SERVICE_NAME, Settings, get_settings
+from app.deps import get_db  # noqa: F401 - imported so the dependency is registered
+from app.errors import ApiError, ErrorCode, error_payload
 from app.logging_config import configure_logging
-from app.routers import api, health
+from app.routers import api, health, jobs, videos
+from app.storage import Storage
 
 API_TITLE = "ClipForge API"
 API_DESCRIPTION = (
     "Local-first API that turns long-form videos into short-form clips for "
     "YouTube Shorts, Instagram Reels and TikTok.\n\n"
-    f"**Project stage:** `{API_STAGE}`. This build exposes the health, "
-    "readiness and API metadata endpoints only. Video ingestion, transcription, "
-    "AI highlight detection, clip rendering and captions are planned for later "
-    "phases and are reported as disabled by `/ready`."
+    f"**Project stage:** `{API_STAGE}`. This build accepts video uploads and "
+    "authorised YouTube URLs, stores them and processes them in a separate "
+    "background worker. Transcription, AI highlight detection, clip rendering "
+    "and captions are planned for later phases and are reported as disabled "
+    "by `/ready`."
 )
 
 logger = logging.getLogger("clipforge.api")
@@ -42,7 +51,7 @@ async def _log_request(
     """Log one line per request.
 
     Only the method, path, status code and duration are recorded. Query
-    strings, headers and bodies are excluded because they can contain
+    strings, headers and bodies are excluded because they can carry
     credentials or user content.
     """
     started = time.perf_counter()
@@ -56,6 +65,41 @@ async def _log_request(
         duration_ms,
     )
     return response
+
+
+class BodySizeLimitMiddleware:
+    """Reject oversized request bodies before they are read.
+
+    This is a cheap first line of defence: a client that sends a
+    ``Content-Length`` header never has its body read at all. Uploads are
+    additionally limited while they stream (see :mod:`app.uploads`), which
+    covers clients that use chunked transfer encoding.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            headers = {
+                key.decode("latin-1").lower(): value.decode("latin-1")
+                for key, value in scope.get("headers", [])
+            }
+            raw_length = headers.get("content-length")
+            if raw_length is not None and raw_length.isdigit():
+                if int(raw_length) > self.max_bytes:
+                    response = JSONResponse(
+                        status_code=413,
+                        content=error_payload(
+                            413,
+                            ErrorCode.PAYLOAD_TOO_LARGE.value,
+                            "The request body is larger than the configured limit.",
+                        ),
+                    )
+                    await response(scope, receive, send)
+                    return
+        await self.app(scope, receive, send)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -76,6 +120,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
     )
 
+    storage = Storage(settings.storage_root)
+    storage.ensure_layout()
+    app.state.settings = settings
+    app.state.storage = storage
+
+    # The limit applies to the whole request body. The multipart envelope adds
+    # a little overhead on top of the file itself, so allow for that.
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        max_bytes=settings.max_upload_bytes + 1024 * 1024,
+    )
     app.add_middleware(
         CORSMiddleware,
         # Explicit origins only: a wildcard is invalid together with
@@ -88,6 +143,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.middleware("http")(_log_request)
 
+    @app.exception_handler(ApiError)
+    async def _api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
+        """Return the standard error envelope for application errors."""
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=error_payload(exc.status_code, exc.code, exc.message),
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        """Return the standard error envelope for a rejected request body.
+
+        Only the field location and the reason are echoed back. The submitted
+        values are never included, because they can contain user content.
+        """
+        problems = []
+        for error in exc.errors():
+            location = ".".join(str(part) for part in error.get("loc", ()) if part != "body")
+            problems.append(f"{location}: {error.get('msg', 'invalid value')}")
+        return JSONResponse(
+            status_code=422,
+            content=error_payload(
+                422,
+                ErrorCode.INVALID_REQUEST.value,
+                "; ".join(problems) or "The request could not be processed.",
+            ),
+        )
+
     @app.exception_handler(StarletteHTTPException)
     async def _http_exception_handler(
         request: Request, exc: StarletteHTTPException
@@ -95,20 +180,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Return a single, consistent error envelope for HTTP errors."""
         return JSONResponse(
             status_code=exc.status_code,
-            content={"error": {"status": exc.status_code, "message": exc.detail}},
+            content=error_payload(
+                exc.status_code, ErrorCode.HTTP_ERROR.value, str(exc.detail)
+            ),
             headers=getattr(exc, "headers", None),
         )
 
     app.include_router(health.router)
     app.include_router(api.router)
+    app.include_router(jobs.router)
+    app.include_router(videos.router)
 
     logger.info(
-        "%s %s ready (service=%s, stage=%s, cors=%s)",
+        "%s %s ready (service=%s, stage=%s, cors=%s, storage=%s)",
         API_TITLE,
         API_VERSION,
         SERVICE_NAME,
         API_STAGE,
         ",".join(settings.cors_origin_list),
+        settings.storage_root,
     )
     return app
 

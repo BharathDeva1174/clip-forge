@@ -6,7 +6,7 @@ it in.
 | Directory | What lives there |
 | --- | --- |
 | repository root (`clipforge\`) | Docs, `.gitignore`, `.editorconfig`, `.env.example` |
-| `backend\` | The FastAPI application, its tests and its `requirements*.txt` |
+| `backend\` | The FastAPI application, the worker and their tests |
 | `frontend\` | The Next.js application and its tests |
 
 Commands are shown for PowerShell. In `cmd.exe` use `copy` instead of
@@ -22,10 +22,20 @@ Commands are shown for PowerShell. In `cmd.exe` use `copy` instead of
 node --version
 npm --version
 python --version
+ffprobe -version
 ```
 
 Requirements: Node.js 20.9 or newer (22 LTS / 24 LTS recommended), npm 10 or
-newer, Python 3.11 or newer.
+newer, Python 3.11 or newer, and **FFmpeg** (FFprobe is required from Phase 2
+onwards).
+
+If FFprobe is missing:
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
+Then reopen the terminal so the new `PATH` is picked up.
 
 ### 1.2 Backend
 
@@ -73,9 +83,10 @@ npm test
 
 ## 2. Running the applications
 
-Two terminals. Run the backend first so the frontend has something to talk to.
+**Three terminals.** The worker is a separate process and is what actually
+processes the jobs — the API only queues them.
 
-### Terminal 1 — backend
+### Terminal 1 — API
 
 ```powershell
 cd clipforge\backend
@@ -98,7 +109,25 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 `--reload` restarts the server when a `.py` file changes. Stop it with
 `Ctrl+C`.
 
-### Terminal 2 — frontend
+### Terminal 2 — worker
+
+```powershell
+cd clipforge\backend
+..\.venv\Scripts\Activate.ps1
+python worker.py
+```
+
+Expected output:
+
+```
+clipforge.worker | worker <hostname>-<pid>-<id> started (storage=..., database=clipforge.db)
+```
+
+The worker polls the database every `CLIPFORGE_WORKER_POLL_INTERVAL_SECONDS`
+seconds. Stop it with `Ctrl+C`; it stops claiming new work and finishes the
+job it is on, or releases it back to the queue.
+
+### Terminal 3 — frontend
 
 ```powershell
 cd clipforge\frontend
@@ -120,8 +149,9 @@ Stop it with `Ctrl+C`.
 | --- | --- |
 | http://localhost:3000 | Frontend |
 | http://localhost:8000/health | `{"status":"ok","service":"clipforge-api"}` |
-| http://localhost:8000/ready | Readiness + capability flags |
+| http://localhost:8000/ready | Readiness and capability flags |
 | http://localhost:8000/api/v1 | API metadata |
+| http://localhost:8000/api/v1/jobs | Recent jobs, newest first |
 | http://localhost:8000/docs | OpenAPI explorer |
 
 ### Production build of the frontend
@@ -145,9 +175,10 @@ npm run start
 
 python -m pytest                    # all tests
 python -m pytest -v                 # verbose
-python -m pytest tests/test_health.py
+python -m pytest tests/test_worker.py
 python -m pytest -k "cors"          # by name
 python -m uvicorn app.main:app --reload --port 8000
+python worker.py                    # the background worker
 ```
 
 Add a dependency:
@@ -168,7 +199,7 @@ npm run lint                        # ESLint
 npm run typecheck                   # next typegen && tsc --noEmit
 npm test                            # Vitest, single run
 npm run test:watch                  # Vitest, watch mode
-npm run test -- health              # Vitest, filtered by file name
+npm test -- health                  # Vitest, filtered by file name
 ```
 
 Add a dependency:
@@ -193,9 +224,30 @@ CLIPFORGE_LOG_LEVEL=INFO
 CLIPFORGE_HOST=127.0.0.1
 CLIPFORGE_PORT=8000
 CLIPFORGE_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
 CLIPFORGE_STORAGE_DIR=data
-# CLIPFORGE_LLM_API_KEY=...        # reserved for Phase 4
+CLIPFORGE_MAX_UPLOAD_BYTES=2147483648
+CLIPFORGE_MAX_VIDEO_DURATION_SECONDS=14400
+CLIPFORGE_MAX_VIDEO_DIMENSION=7680
+CLIPFORGE_ALLOWED_UPLOAD_EXTENSIONS=.mp4,.mov,.m4v,.webm,.mkv
+CLIPFORGE_ALLOWED_VIDEO_CODECS=h264,hevc,vp9,av1,mpeg4
+
+CLIPFORGE_FFPROBE_PATH=ffprobe
+CLIPFORGE_FFPROBE_TIMEOUT_SECONDS=60
+
+CLIPFORGE_WORKER_POLL_INTERVAL_SECONDS=2
+CLIPFORGE_WORKER_LEASE_SECONDS=300
+CLIPFORGE_WORKER_MAX_ATTEMPTS=3
+CLIPFORGE_WORKER_ACQUISITION_TIMEOUT_SECONDS=1800
+
+CLIPFORGE_DATABASE_BUSY_TIMEOUT_SECONDS=30
+CLIPFORGE_DATABASE_WAL_MODE=true
+
+CLIPFORGE_YOUTUBE_ACQUISITION_MODE=yt_dlp
+CLIPFORGE_YOUTUBE_MAX_BYTES=2147483648
 ```
+
+The full list, with comments, is in `backend/.env.example`.
 
 ### Frontend — `clipforge\frontend\.env.local`
 
@@ -212,11 +264,44 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 1. Set `CLIPFORGE_PORT=8010` in `backend/.env`.
 2. Set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8010` in
    `frontend/.env.local`.
-3. Restart both applications.
+3. Restart the API, the worker and the frontend.
+
+### Turning YouTube ingestion off
+
+Set `CLIPFORGE_YOUTUBE_ACQUISITION_MODE=disabled` in `backend/.env` and
+restart the API. The YouTube form then answers `503
+youtube_acquisition_unavailable` and tells the user to upload a local file.
 
 ---
 
-## 5. Troubleshooting
+## 5. Working with the data directory
+
+```
+backend/data/
+├── uploads/    in-flight uploads
+├── sources/    accepted source videos
+├── temp/       worker scratch space
+└── database/   clipforge.db
+```
+
+To reclaim the disk space of sources you no longer need:
+
+```powershell
+Remove-Item -Recurse -Force clipforge\backend\data\sources
+```
+
+To start completely fresh (this deletes every job record):
+
+```powershell
+Remove-Item -Recurse -Force clipforge\backend\data
+```
+
+Both are safe: nothing outside `backend\data` is touched, and the directory is
+recreated on the next start.
+
+---
+
+## 6. Troubleshooting
 
 ### `python` is not recognised
 
@@ -238,6 +323,34 @@ Or skip activation:
 ..\.venv\Scripts\python.exe -m pytest
 ```
 
+### `ffprobe is not installed or not on PATH`
+
+Install FFmpeg (`winget install Gyan.FFmpeg`) and reopen the terminal, or
+point the application at it explicitly:
+
+```
+CLIPFORGE_FFPROBE_PATH=C:\path\to\ffprobe.exe
+```
+
+Every upload then fails with `415 media_tool_unavailable`, which says so
+plainly instead of accepting the file.
+
+### A job stays `queued`
+
+The worker is not running. Start it:
+
+```powershell
+cd clipforge\backend
+..\.venv\Scripts\Activate.ps1
+python worker.py
+```
+
+### A job stays `validating` or `downloading`
+
+The worker died while it owned the job. The lease expires after
+`CLIPFORGE_WORKER_LEASE_SECONDS` (default 5 minutes) and the job is queued
+again. Restarting the worker recovers it straight away.
+
 ### `Port 8000 is already in use`
 
 ```powershell
@@ -250,24 +363,35 @@ Or change `CLIPFORGE_PORT` and `NEXT_PUBLIC_API_BASE_URL` as described above.
 
 ### The frontend shows "Backend unreachable"
 
-1. Is the backend running? Open http://localhost:8000/health.
-2. Does `NEXT_PUBLIC_API_BASE_URL` match the backend's port?
+1. Is the API running? Open http://localhost:8000/health.
+2. Does `NEXT_PUBLIC_API_BASE_URL` match the API's port?
 3. Did you change `.env.local` after starting the dev server? Restart it.
 4. Is the browser console showing a CORS error? Add the exact browser origin
    to `CLIPFORGE_CORS_ORIGINS`. Wildcards are rejected on purpose.
 
-### `npm run build` fails while downloading fonts
+### An upload is rejected with 413
 
-`next/font/google` fetches Geist at build time. Without internet access,
-remove the `next/font` imports from `src/app/layout.tsx` and use a system font
-stack instead.
+The file is larger than `CLIPFORGE_MAX_UPLOAD_BYTES`. Raise it if you have the
+disk space.
+
+### An upload is rejected with 415
+
+Either the extension is not in `CLIPFORGE_ALLOWED_UPLOAD_EXTENSIONS`, or
+FFprobe could not read a video from the file. The message says which.
+
+### A YouTube job fails with `acquisition_failed`
+
+The video could not be downloaded: it may be private, region-locked,
+age-restricted, or removed. The downloader's own output is in the worker log,
+not in the job record. Upload a local copy instead.
 
 ### The backend will not start
 
 Read the traceback. The usual causes are a missing dependency
 (`pip install -r requirements-dev.txt`), a malformed `.env`, or an invalid
-value — a non-numeric `CLIPFORGE_PORT` or a `*` in `CLIPFORGE_CORS_ORIGINS`
-both fail fast at startup, by design.
+value — a non-numeric `CLIPFORGE_PORT`, a `*` in `CLIPFORGE_CORS_ORIGINS`, or
+a malformed entry in `CLIPFORGE_ALLOWED_UPLOAD_EXTENSIONS` all fail fast at
+startup, by design.
 
 ### Tests fail after changing `config.py`
 
@@ -277,11 +401,11 @@ without a default, update `backend/.env.example` and the defaults in
 
 ---
 
-## 6. Git
+## 7. Git
 
 The repository was initialised with Git in Phase 1. `backend/.venv`,
-`frontend/node_modules`, build output, `.env` files and generated media are
-ignored.
+`frontend/node_modules`, build output, `.env` files and the whole `data`
+directory are ignored.
 
 ```powershell
 git status

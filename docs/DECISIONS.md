@@ -198,6 +198,226 @@ with the file.
 
 ---
 
+## D13 — The worker is a separate operating-system process
+
+**Decision.** `backend/worker.py` is its own process. It is not a FastAPI
+`BackgroundTask`, not an in-process thread and not an in-memory queue.
+
+**Why.** The brief requires a durable worker, and the reasons are technical as
+well as contractual:
+
+- A background task dies with the API process. Jobs would be lost on every
+  restart, and the API would have to be running for the pipeline to work at
+  all.
+- An in-memory queue has no durable state. The database *is* the queue, so a
+  job survives a crash of either process.
+- A separate process can be killed, restarted and inspected on its own, and
+  its memory and CPU use do not compete with the API's event loop.
+- Long downloads need process control: a timeout, a clean shutdown and the
+  ability to terminate a child process. That is much easier to reason about
+  when the worker owns the child.
+
+**Cost.** Three processes to start in development instead of one, and the
+worker needs the same configuration and the same database file as the API.
+The startup documentation covers it, and the worker uses the same
+`get_settings()` the API does, so there is nothing to keep in sync by hand.
+
+---
+
+## D14 — The job state machine is explicit and centrally enforced
+
+**Decision.** The status set, the stage set and the allowed transitions live
+in `app/jobs.py`. Every write goes through `assert_transition()`, and the
+database adds `CHECK` constraints on the status, stage and source type.
+
+**Why.** "Prevent invalid transitions" is only enforceable if the rules are
+written down once. A transition table makes the rules reviewable, and the
+`CHECK` constraints make the database the last line of defence rather than the
+only one.
+
+**Cost.** A status change needs a change in two places: the transition table
+and, if it is a new status, the `CHECK` constraint and a migration. That is
+deliberate friction.
+
+---
+
+## D15 — At-least-once processing with idempotent steps
+
+**Decision.** The worker guarantees at-least-once, not exactly-once. A job
+may be processed twice if a worker dies after doing the work but before
+recording the result.
+
+**Why.** Exactly-once would need a distributed transaction between the
+filesystem and the database, which SQLite does not offer and which is not
+worth building for a local tool. At-least-once is achievable and safe as long
+as each step is idempotent, so the steps are written that way: a source that
+is already stored is re-inspected rather than re-downloaded, and a job record
+is never duplicated.
+
+**Cost.** A rare double inspection. The document says "at-least-once"
+explicitly rather than implying a stronger guarantee.
+
+---
+
+## D16 — Leases with expiry, and recovery at startup
+
+**Decision.** A claimed job carries `lease_expires_at`. The worker renews the
+lease while it works, and recovers expired leases at startup and every few
+minutes. A recovered job is requeued unless it has used up its attempts, in
+which case it fails with `max_attempts_exceeded`.
+
+**Why.** A worker that is killed — a crash, a closed terminal, a power cut —
+would otherwise leave a job in `validating` forever, because the row says a
+worker owns it and no worker is coming. A lease with an expiry makes the
+ownership self-healing: any worker can take over once the lease has passed,
+and the job can never be stuck.
+
+**Cost.** A worker that is merely very slow could have its job taken over.
+That is why the lease is renewed during a download and why it is generous by
+default (five minutes).
+
+---
+
+## D17 — Only transient failures are retried
+
+**Decision.** `acquisition_failed`, `acquisition_timeout` and
+`media_tool_unavailable` are retried up to `worker_max_attempts`. Everything
+else — invalid media, an unsupported codec, a video that is too long — fails
+immediately and permanently.
+
+**Why.** "Never retry a permanently invalid input indefinitely" is a
+requirement, and it is also the obvious thing to get wrong: a retry loop
+around a file that is not a video burns CPU and delays the real error the
+user needs to see. The error code decides, not a blanket policy.
+
+**Cost.** A new error kind has to be classified. The set of retryable codes
+is one constant in `app/worker.py`.
+
+---
+
+## D18 — The upload limit is enforced while the body streams
+
+**Decision.** ClipForge parses the multipart body itself with
+`python-multipart`, driving the parser from the request stream, and stops as
+soon as the byte limit is passed. A `Content-Length` above the limit is
+rejected by a middleware before the body is read at all.
+
+**Why.** Starlette's own form parser spools the whole file to a temporary
+file *before* the endpoint runs, and it has no limit on file part size. An
+oversized upload would therefore be written to disk in full before the
+application could refuse it — the exact resource consumption the brief asks
+to avoid. Driving the same library directly keeps the streaming behaviour and
+adds the limit.
+
+**Cost.** About 150 lines of parsing code, and a dependency on
+`python-multipart` at a specific version. The alternative was a naive body
+parser, which the brief explicitly warns against.
+
+---
+
+## D19 — FFprobe is the only authority on what a video is
+
+**Decision.** The extension allowlist is a cheap first filter; FFprobe decides
+whether the file is really a video, how long it is and how big it is. The
+client's MIME type is never consulted.
+
+**Why.** An extension is a claim, not a fact. `evil.mp4` can be anything, and
+`clip.mp4` can be a text file. FFprobe reads the container, so it is the only
+thing that can be trusted. The MIME type is even less reliable than the
+extension, since browsers and operating systems disagree about it.
+
+**Cost.** A subprocess per upload. FFprobe reads container metadata and does
+not decode frames, so it is fast; the timeout bounds it anyway.
+
+---
+
+## D20 — YouTube URLs are validated by exact hostname comparison
+
+**Decision.** `app/youtube.py` accepts only the hostnames in
+`CLIPFORGE_YOUTUBE_ALLOWED_HOSTS`, compared exactly, and normalises every
+accepted form to `https://www.youtube.com/watch?v=<id>`. It rejects other
+schemes, credentials in the URL, non-default ports, malformed ids and unknown
+paths. It never touches the network.
+
+**Why.** Substring matching is how `youtube.com.attacker.example` gets
+through. Exact comparison makes the whole class of host-confusion attacks
+impossible. Keeping the module pure also means the rule can be tested
+exhaustively without a network.
+
+**Cost.** A new YouTube host — a regional domain, say — needs a
+configuration change. That is a feature, not a bug: the allowlist is meant to
+be explicit.
+
+---
+
+## D21 — yt-dlp, without cookies or a login, behind an adapter
+
+**Decision.** The downloader is `yt-dlp`, started as `python -m yt_dlp` with
+an argument list and no shell, given only a validated canonical URL. It is
+never given cookies, a username or a playlist. It sits behind the
+`SourceAcquirer` interface, and the whole YouTube path can be switched off
+with `CLIPFORGE_YOUTUBE_ACQUISITION_MODE=disabled`.
+
+**Why.** yt-dlp is the de-facto standard, it is pure Python, it is
+released under the Unlicense, and it works with the interpreter that is
+already installed. Not giving it credentials means it can only reach
+material that is publicly available without signing in — which is exactly
+the boundary ClipForge wants. The adapter keeps the choice replaceable: a
+different acquisition mechanism is one class.
+
+**Cost — and this is stated rather than hidden:** the URL the *user* supplies
+is fully under our control, but the redirects yt-dlp follows internally are
+not. YouTube serves media from `googlevideo.com` hosts that YouTube chooses,
+and yt-dlp resolves and follows those itself. This is inherent to how YouTube
+works and is why the mode is configurable. A stricter design would need a
+downloader with a controllable HTTP client, at the cost of losing most of
+yt-dlp's format handling.
+
+---
+
+## D22 — The caller must confirm they are authorised
+
+**Decision.** The YouTube submission carries `authorized: true`, and the
+frontend presents it as an explicit checkbox: *"I own this video or have
+permission to download and reuse it."* A submission without it is refused
+with `unauthorized_source`.
+
+**Why.** A publicly viewable video is not automatically authorised for
+downloading and reuse. Making the user state their rights is a small,
+honest control that also puts the responsibility where it belongs.
+
+**Cost:** one extra field, and a checkbox the user has to tick. The backend
+cannot verify the claim, and does not pretend to.
+
+---
+
+## D23 — Source files are kept when processing fails
+
+**Decision.** A source is deleted only when the upload itself failed. A
+source whose *job* failed stays on disk.
+
+**Why.** The upload was valid; the failure was in processing. Throwing away
+a multi-gigabyte file because, say, the download of a different job timed out
+would be hostile, and the file may still be wanted.
+
+**Cost:** disk space that the user has to reclaim by hand. The layout and the
+cleanup command are documented.
+
+---
+
+## D24 — Job responses never contain a filesystem path
+
+**Decision.** The job schema has `source_reference` (the display name or the
+canonical URL) but no path, no worker id and no lease information.
+
+**Why.** A path is an internal detail and, on a shared machine, a small
+information leak. It also makes the API harder to change: a path is an
+implementation detail of the storage layout.
+
+**Cost:** the frontend cannot show where the file lives. It does not need to.
+
+---
+
 ## Open decisions
 
 Not yet settled; each should be decided when its phase starts.
@@ -206,7 +426,8 @@ Not yet settled; each should be decided when its phase starts.
 | --- | --- |
 | Which speech-to-text engine? Offline (Whisper) or a hosted API? | Phase 3 |
 | Which LLM provider and endpoint dialect? | Phase 4 |
-| One worker process, or a queue table in SQLite with several workers? | Phase 5 |
+| One worker process, or a queue table with several workers? | Phase 5 |
 | Subtitle burn-in with FFmpeg `drawtext`/ASS, or a rendered overlay? | Phase 6 |
+| How should a job be cancelled, and what does it mean for a running download? | Phase 8 |
 | Does the API need authentication once it can run on a shared network? | Phase 9 |
 | One-command launcher: PowerShell script, npm script, or a small Python CLI? | Phase 10 |

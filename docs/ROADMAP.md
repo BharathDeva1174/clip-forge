@@ -1,12 +1,12 @@
 # Roadmap
 
-ClipForge is planned as ten phases. Only Phase 1 has been started; the rest are
-described so that the architecture has something to grow into.
+ClipForge is planned as ten phases. Phases 1 and 2 are implemented; the rest
+are described so that the architecture has something to grow into.
 
 | # | Phase | Status |
 | --- | --- | --- |
-| 1 | Project foundation | **In progress** — acceptance criteria under verification |
-| 2 | Video ingestion | Not started |
+| 1 | Project foundation | **Complete** — see [PHASE_1_REPORT.md](../PHASE_1_REPORT.md) |
+| 2 | Video ingestion | **Complete** — see [PHASE_2_REPORT.md](../PHASE_2_REPORT.md) |
 | 3 | Audio extraction and transcription | Not started |
 | 4 | AI highlight detection | Not started |
 | 5 | Video clip generation | Not started |
@@ -16,44 +16,51 @@ described so that the architecture has something to grow into.
 | 9 | Reliability and testing | Not started |
 | 10 | Local launch and polish | Not started |
 
-Phase 1 stays *in progress* until every item in its acceptance list has been
-verified with real evidence. The evidence is recorded in
-[PHASE_1_REPORT.md](../PHASE_1_REPORT.md).
+Each phase is only marked complete once its acceptance criteria have been
+verified with real evidence. The evidence for Phases 1 and 2 is recorded in
+their reports.
 
 ---
 
-## Phase 1 — Project foundation ✅ *in progress*
+## Phase 1 — Project foundation ✅ *complete*
 
 Repository, backend API skeleton, frontend shell, configuration, tests and
 documentation.
 
-Delivers:
+Delivered:
 
 - FastAPI application with `/health`, `/ready` and `/api/v1`.
 - Typed, environment-driven configuration with secret handling.
-- Next.js shell with a live backend status indicator (loading, success,
-  failure, retry).
-- A disabled video-input section and a pipeline preview, so the UI never
-  pretends a feature exists that does not.
+- Next.js shell with a live backend status indicator.
 - Backend test suite, frontend unit and component tests, lint and type
   checks.
 - Documentation: README, architecture, development, testing, roadmap,
   decisions.
 
-Acceptance criteria are listed in [PHASE_1_REPORT.md](../PHASE_1_REPORT.md).
-
 ---
 
-## Phase 2 — Video ingestion
+## Phase 2 — Video ingestion ✅ *complete*
 
-Not started.
+Secure ingestion, persistent jobs and a separate worker.
 
-- Upload local video files to `CLIPFORGE_STORAGE_DIR/sources`.
-- Accept a YouTube URL, **only** for videos the user is authorised to access
-  and permitted to download, respecting YouTube's terms of service.
-- Create a job row in SQLite and return a job identifier.
-- Background worker picks the job up; the API never blocks on it.
-- Frontend: replace the disabled panel with a real upload and URL form.
+Delivered:
+
+- `POST /api/v1/videos/upload` — a streamed multipart upload with the size
+  limit enforced while the body arrives, validated by FFprobe.
+- `POST /api/v1/videos/youtube` — a strictly validated YouTube URL, with the
+  caller confirming they are authorised to use the video.
+- `GET /api/v1/jobs` and `GET /api/v1/jobs/{id}` — a bounded, ordered job
+  list and one job's status.
+- SQLite job records with a versioned schema, atomic claiming, leases and
+  crash recovery.
+- A separate worker process that polls, claims, acquires and inspects.
+- The frontend upload and YouTube forms, and a job list that polls while a
+  job is running and stops when it is finished.
+- A documented storage layout with path containment, and documented retention
+  behaviour.
+
+**`completed` means ingestion and media inspection finished.** It does not mean
+clips exist.
 
 ---
 
@@ -108,10 +115,10 @@ Not started.
 
 Not started.
 
-- Replace the landing shell with a working dashboard.
-- Job list with live status and progress.
+- Replace the single page with a routed dashboard.
+- Job list with live status, progress and a job detail view.
 - Clip grid with thumbnails and playback.
-- Replace the current single health check with a real status view.
+- Replace the single health check with a real status view.
 
 ---
 
@@ -123,6 +130,7 @@ Not started.
 - Edit the title and the caption text.
 - Choose which clips to export.
 - Download individual clips and a ZIP of a batch.
+- Add the job cancellation API that the `cancelled` status is waiting for.
 
 ---
 
@@ -142,7 +150,8 @@ Not started.
 
 Not started.
 
-- One-command local start (a script that launches both applications).
+- One-command local start (a script that launches the API, the worker and the
+  frontend together).
 - First-run wizard for configuration and the LLM key.
 - Cleanup and disk-usage handling for generated media.
 - Error reporting that a non-technical user can act on.

@@ -35,14 +35,19 @@ def test_ready_does_not_claim_unimplemented_capabilities(client: TestClient) -> 
     body = client.get("/ready").json()
     capabilities = body["capabilities"]
 
-    assert capabilities["video_ingestion"] is False
+    # Phase 2 implements ingestion, the job database and local storage. The
+    # later pipeline stages are still absent and must not be advertised.
+    assert capabilities["video_ingestion"] is True
+    assert capabilities["background_worker"] is True
+    assert capabilities["database"] is True
+    assert capabilities["persistent_storage"] is True
+
+    assert capabilities["audio_extraction"] is False
     assert capabilities["transcription"] is False
     assert capabilities["llm_highlight_detection"] is False
     assert capabilities["clip_rendering"] is False
     assert capabilities["vertical_formatting"] is False
     assert capabilities["subtitle_generation"] is False
-    assert capabilities["database"] is False
-    assert capabilities["persistent_storage"] is False
 
 
 def test_unknown_route_returns_404(client: TestClient) -> None:

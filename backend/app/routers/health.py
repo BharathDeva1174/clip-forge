@@ -30,21 +30,23 @@ class HealthResponse(BaseModel):
 
 
 class Capabilities(BaseModel):
-    """Feature flags for capabilities that are not implemented yet.
+    """Feature flags for the capabilities of the application.
 
-    Every flag is ``False`` in Phase 1. They exist so that clients can tell the
-    difference between "not implemented yet" and "not available".
+    A flag is ``True`` only when the capability is implemented *and* usable.
+    They exist so that a client can tell the difference between "not
+    implemented yet" and "not available".
     """
 
-    video_ingestion: bool = False
+    video_ingestion: bool = True
+    background_worker: bool = True
+    database: bool = True
+    persistent_storage: bool = True
     audio_extraction: bool = False
     transcription: bool = False
     llm_highlight_detection: bool = False
     clip_rendering: bool = False
     vertical_formatting: bool = False
     subtitle_generation: bool = False
-    database: bool = False
-    persistent_storage: bool = False
 
 
 class ReadyResponse(BaseModel):

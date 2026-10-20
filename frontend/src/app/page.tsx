@@ -1,21 +1,21 @@
 import HealthIndicator from "@/components/HealthIndicator";
+import JobList from "@/components/JobList";
 import PipelinePreview from "@/components/PipelinePreview";
 import VideoSourcePanel from "@/components/VideoSourcePanel";
 import { getApiBaseUrl } from "@/lib/config";
 
 const WORKING_TODAY = [
-  "Backend health, readiness and API metadata endpoints",
-  "Frontend shell with a live backend status indicator",
-  "Environment-driven configuration on both sides",
-  "Typed API contracts with automated tests",
+  "Video upload and authorised YouTube ingestion",
+  "Persistent SQLite job records with a separate worker process",
+  "Real media inspection with FFprobe before a source is accepted",
+  "Frontend job list with live status and progress",
 ];
 
 const ON_THE_ROADMAP = [
-  "Local file upload and authorised YouTube ingestion (Phase 2)",
   "Audio extraction and speech-to-text transcription (Phase 3)",
   "LLM highlight detection over the transcript (Phase 4)",
   "FFmpeg clip rendering, 9:16 conversion and burned-in captions (Phases 5–6)",
-  "Job tracking, SQLite storage, editing and export (Phases 7–9)",
+  "Job tracking, clip editing and export (Phases 7–8)",
 ];
 
 export default function Home() {
@@ -47,7 +47,7 @@ export default function Home() {
         <section className="relative overflow-hidden pt-16 pb-12">
           <div aria-hidden="true" className="hero-glow pointer-events-none absolute inset-0 -z-10" />
           <p className="text-[11px] font-semibold tracking-[0.2em] text-ember-400 uppercase">
-            Phase 1 · Foundation
+            Phase 2 · Ingestion
           </p>
           <h1 className="mt-5 max-w-3xl text-4xl leading-[1.1] font-semibold tracking-tight text-ink sm:text-5xl">
             Turn one long video into a week of short-form clips.
@@ -73,6 +73,10 @@ export default function Home() {
         </section>
 
         <VideoSourcePanel />
+
+        <div className="mt-14">
+          <JobList />
+        </div>
 
         <section aria-labelledby="pipeline-heading" className="mt-14">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -135,7 +139,7 @@ export default function Home() {
 
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-xs text-ink-faint">
-          <p>ClipForge · Phase 1 foundation · API at {apiBaseUrl}</p>
+          <p>ClipForge · Phase 2 ingestion · API at {apiBaseUrl}</p>
           <p>Local-first. Nothing leaves your machine unless you configure it to.</p>
         </div>
       </footer>

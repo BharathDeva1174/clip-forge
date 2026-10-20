@@ -1,7 +1,18 @@
 # ClipForge API runtime dependencies.
 # Install with:  pip install -r requirements.txt
-# Pinned to the versions verified in Phase 1 (Python 3.11+).
+# Pinned to the versions verified in Phase 2 (Python 3.11+).
 
 fastapi==0.150.0
 uvicorn[standard]==0.54.0
 pydantic-settings==2.16.0
+
+# Multipart parsing. Starlette's own parser spools the whole file to a
+# temporary file before the endpoint runs and has no limit on file part size,
+# so ClipForge parses the body itself with this library to enforce the upload
+# limit while the body is still arriving.
+python-multipart==0.0.32
+
+# Used by the YouTube acquisition adapter. It is started as
+# `python -m yt_dlp` and is only used for URLs that have already passed strict
+# hostname and format validation.
+yt-dlp==2026.8.19

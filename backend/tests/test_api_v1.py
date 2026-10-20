@@ -15,5 +15,5 @@ def test_api_v1_returns_the_expected_metadata(client: TestClient) -> None:
 
     assert body["name"] == "ClipForge API"
     assert body["version"]
-    assert body["stage"] == "phase-1-foundation"
+    assert body["stage"] == "phase-2-ingestion"
     assert body["docs"] == "/docs"
