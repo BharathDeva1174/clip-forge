@@ -3,14 +3,26 @@
 **ClipForge** turns long-form videos into multiple short-form clips sized for
 YouTube Shorts, Instagram Reels and TikTok. It runs locally on your own
 machine: your videos never leave your disk, and the only credential it needs is
-your own LLM API key.
+your own LLM API key (optional).
 
-> **Status: Phase 2 (video ingestion and background jobs).** The API accepts
-> video uploads and authorised YouTube URLs, stores them, and validates them
-> with FFprobe in a separate worker process. Transcription, AI highlight
-> detection, clip rendering and captions are **not implemented yet** — the UI
-> labels every one of them as upcoming. See
-> [docs/ROADMAP.md](docs/ROADMAP.md) and [PHASE_2_REPORT.md](PHASE_2_REPORT.md).
+**Status: Phase 10 — Local Launch & Polish.** All ten phases are implemented
+and verified: video ingestion, transcription, AI highlight detection, clip
+rendering, vertical formatting with burned-in captions, revisions, caption
+overrides, and ZIP export. See [docs/ROADMAP.md](docs/ROADMAP.md) and the
+`PHASE_*_REPORT.md` files for the evidence.
+
+Work continued after Phase 10 on the reliability of the AI pipeline and on
+cancellation: a running highlight analysis now renews its lease during the
+provider call and is bounded by an analysis deadline, and cancelling a job
+stops the in-flight download or render within one lease tick instead of
+letting it finish. Those are decisions D51–D55 in
+[docs/DECISIONS.md](docs/DECISIONS.md), and
+[PHASE_4_RELIABILITY_REPORT.md](PHASE_4_RELIABILITY_REPORT.md) records the
+incident behind them.
+
+**Just cloned it?** [QUICK_START.md](QUICK_START.md) walks from an empty folder
+to a finished vertical clip: prerequisites, the two `pip`/`npm` installs, the
+one-command launch, the first clip, and how to check the install.
 
 ---
 
@@ -20,10 +32,12 @@ your own LLM API key.
 | --- | --- |
 | Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4 |
 | Backend | Python 3.11+, FastAPI, Uvicorn, Pydantic v2 / pydantic-settings |
-| Jobs | SQLite (WAL mode) with a versioned schema and atomic claiming |
+| Jobs | SQLite (WAL mode) with a versioned schema (v7) and atomic claiming |
 | Worker | A separate Python process (`backend/worker.py`) |
-| Media | FFprobe for validation (FFmpeg for rendering, from Phase 5) |
-| AI (planned) | External LLM API for highlight detection, behind a provider abstraction |
+| Media | FFprobe for validation, FFmpeg for audio extraction, rendering, formatting |
+| Ingestion | `yt-dlp` for an authorised YouTube URL, behind a swappable acquirer that can be turned off |
+| Speech | `faster-whisper` — Whisper models running locally, offline-capable |
+| AI (optional) | User-configured provider behind a provider abstraction (OpenAI-compatible, OpenAI Responses, Anthropic) |
 | Tests | pytest + httpx (backend), Vitest + React Testing Library (frontend) |
 
 Docker is **optional** and not required to run anything in this repository.
@@ -37,8 +51,8 @@ Docker is **optional** and not required to run anything in this repository.
 | Node.js | 20.9+ (22 LTS / 24 LTS recommended) | Next.js 16 requires >= 20.9.0 |
 | npm | 10+ | Ships with Node.js |
 | Python | 3.11+ | `python --version` |
-| **FFmpeg / FFprobe** | 4+ | **Required from Phase 2** — media validation uses FFprobe |
-| Git | any | Only needed if you want to commit changes |
+| **FFmpeg / FFprobe** | 4+ | Required — media validation uses FFprobe, rendering uses FFmpeg |
+| Git | any | Only needed to inspect the repository |
 
 Check what you have:
 
@@ -47,14 +61,17 @@ node --version
 npm --version
 python --version
 ffprobe -version
+ffmpeg -version
 ```
 
-If FFprobe is missing, install FFmpeg and make sure `ffprobe` is on your
-`PATH` (the `Gyan.FFmpeg` winget package does this for you):
+If FFmpeg/FFprobe is missing, install FFmpeg and make sure `ffprobe` is on your
+`PATH` (the Gyan.FFmpeg winget package does this):
 
 ```powershell
 winget install Gyan.FFmpeg
 ```
+
+Then reopen the terminal so the new `PATH` is picked up.
 
 ---
 
@@ -63,51 +80,43 @@ winget install Gyan.FFmpeg
 ```
 clipforge/
 ├── frontend/                  # Next.js app (http://localhost:3000)
-│   ├── src/
-│   │   ├── app/               # layout, page, global styles
-│   │   ├── components/        # HealthIndicator, JobList, PipelinePreview, VideoSourcePanel
-│   │   └── lib/               # api client, config, health check
-│   ├── public/
-│   ├── package.json
-│   └── .env.example
-├── backend/                   # FastAPI app (http://localhost:8000)
-│   ├── app/
-│   │   ├── main.py            # application entry point
-│   │   ├── config.py          # environment-driven settings
-│   │   ├── db.py              # SQLite schema, migrations, job repository
-│   │   ├── jobs.py            # job states and allowed transitions
-│   │   ├── storage.py         # storage layout and path containment
-│   │   ├── media.py           # FFprobe inspection
-│   │   ├── youtube.py         # strict URL validation
-│   │   ├── acquisition.py     # downloader adapter
-│   │   ├── uploads.py         # streaming multipart upload
-│   │   ├── worker.py          # background worker
-│   │   └── routers/           # health, api, jobs, videos
-│   ├── worker.py              # worker entry point
-│   ├── tests/
-│   ├── requirements.txt
-│   └── .env.example
+├── backend/                   # FastAPI app (http://localhost:8000) + worker
 ├── docs/                      # Architecture, development, testing, roadmap, decisions
-├── .env.example
-├── .editorconfig
-├── .gitignore
+├── scripts/                   # start-local.ps1 (one-command launch), test-health.ps1
+├── .env.example               # Root template (points at the two app templates)
 ├── README.md
-├── PHASE_1_REPORT.md
-└── PHASE_2_REPORT.md
+├── QUICK_START.md             # Clone → first finished clip
+├── AGENTS.md
+└── PHASE_*_REPORT.md          # Per-phase evidence reports
 ```
+
+The virtual environment lives at `..\.venv` — at the repository root, not
+inside `backend/`. `backend/data/` holds the media, the model cache and the
+SQLite file, and is git-ignored.
 
 ---
 
-## Setup (Windows PowerShell)
+## First-time setup (Windows PowerShell)
 
-Run every command from the repository root unless the comment says otherwise.
+Run every command from the repository root unless a comment says otherwise.
+
+### 0. Get the code
+
+```powershell
+git clone https://github.com/BharathDeva1174/clip-forge.git
+cd clip-forge
+```
+
+The repository carries source and documentation only — no media, no database,
+no model weights, no environment files. See [QUICK_START.md](QUICK_START.md) for
+the short version of everything below.
 
 ### 1. Backend
 
 ```powershell
 cd backend
 
-# Create and activate the virtual environment
+# Create and activate the virtual environment (at the repo root)
 python -m venv ..\.venv
 ..\.venv\Scripts\Activate.ps1
 
@@ -117,29 +126,60 @@ pip install -r requirements-dev.txt
 
 # Create your local environment file
 Copy-Item .env.example .env
-
-# Confirm it works
-python -m pytest
 ```
 
-If PowerShell blocks the activation script, allow it for the current session:
+> If PowerShell blocks the activation script, run
+> `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` in the same
+> terminal and activate again. You can also skip activation entirely and use
+> `..\.venv\Scripts\python.exe` in place of `python`.
+
+`pip install -r requirements-dev.txt` also installs `faster-whisper`. It pulls
+in ctranslate2, huggingface-hub, tokenizers, onnxruntime and av, so it is a
+noticeably larger install than a plain FastAPI one.
+
+#### The speech model
+
+The model weights are **not** part of the installation. The first
+transcription downloads the configured model into `backend/data/models/` and
+every later one runs offline. To fetch it up front — for example on a machine
+that will be offline afterwards — run:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+cd backend
+..\.venv\Scripts\python.exe -c "from pathlib import Path; from faster_whisper import WhisperModel; WhisperModel('tiny.en', device='cpu', compute_type='int8', download_root='data/models'); print('model cached')"
 ```
+
+| Model | Size | Use it when |
+| --- | --- | --- |
+| `tiny.en` | about 75 MB | Development, and a quick check that the pipeline works |
+| `base.en` | about 145 MB | The sensible default for real use |
+| `small.en` | about 480 MB | Accuracy matters more than time |
+
+The model name is set with `CLIPFORGE_TRANSCRIPTION_MODEL`. Only the `.en`
+models are English; the multilingual models (`base`, `small`, …) are used
+for other languages.
+
+Set `CLIPFORGE_TRANSCRIPTION_OFFLINE=true` once the model is cached: the
+engine then refuses to touch the network at all, and a missing model produces
+an actionable error instead of a silent download.
 
 ### 2. Frontend
 
 ```powershell
 cd frontend
 
-# Install dependencies
 npm install
 
-# Create your local environment file
 Copy-Item .env.example .env.local
+```
 
-# Confirm it works
+### 3. Sanity check
+
+```powershell
+cd backend
+..\.venv\Scripts\python.exe -m pytest
+
+cd ..\frontend
 npm run typecheck
 npm run lint
 npm test
@@ -150,307 +190,263 @@ npm test
 ## Configuration
 
 Environment variables are the only configuration mechanism. There is no config
-file to keep in sync with the code.
+file. The backend reads `backend/.env`; the frontend reads
+`frontend/.env.local`. See `backend/.env.example` and `frontend/.env.example`
+for the full, commented list.
 
-### Backend — `backend/.env`
+Essentials:
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `CLIPFORGE_ENVIRONMENT` | `development` | `development` \| `test` \| `production` |
-| `CLIPFORGE_DEBUG` | `false` | Verbose error output |
-| `CLIPFORGE_LOG_LEVEL` | `INFO` | Log level |
-| `CLIPFORGE_HOST` | `127.0.0.1` | API bind address |
-| `CLIPFORGE_PORT` | `8000` | API port |
-| `CLIPFORGE_CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Allowed browser origins |
-| `CLIPFORGE_STORAGE_DIR` | `data` | Root of uploads, sources, scratch space and the database |
-| `CLIPFORGE_DATABASE_PATH` | *(unset)* | Overrides the database location |
-| `CLIPFORGE_MAX_UPLOAD_BYTES` | `2147483648` (2 GiB) | Maximum upload size |
-| `CLIPFORGE_MAX_VIDEO_DURATION_SECONDS` | `14400` (4 h) | Maximum video duration |
-| `CLIPFORGE_MAX_VIDEO_DIMENSION` | `7680` | Maximum width/height in pixels |
-| `CLIPFORGE_ALLOWED_UPLOAD_EXTENSIONS` | `.mp4,.mov,.m4v,.webm,.mkv` | Accepted containers |
-| `CLIPFORGE_ALLOWED_VIDEO_CODECS` | `h264,hevc,vp9,av1,mpeg4` | Accepted video codecs |
-| `CLIPFORGE_FFPROBE_PATH` | `ffprobe` | FFprobe executable |
-| `CLIPFORGE_FFPROBE_TIMEOUT_SECONDS` | `60` | FFprobe timeout |
-| `CLIPFORGE_WORKER_POLL_INTERVAL_SECONDS` | `2` | How often the worker polls |
-| `CLIPFORGE_WORKER_LEASE_SECONDS` | `300` | How long a claimed job stays owned |
-| `CLIPFORGE_WORKER_MAX_ATTEMPTS` | `3` | Retries for a transient failure |
-| `CLIPFORGE_WORKER_ACQUISITION_TIMEOUT_SECONDS` | `1800` | Download timeout |
-| `CLIPFORGE_DATABASE_BUSY_TIMEOUT_SECONDS` | `30` | SQLite lock wait |
-| `CLIPFORGE_DATABASE_WAL_MODE` | `true` | WAL mode (local filesystems only) |
-| `CLIPFORGE_YOUTUBE_ACQUISITION_MODE` | `yt_dlp` | `yt_dlp` or `disabled` |
-| `CLIPFORGE_YOUTUBE_ALLOWED_HOSTS` | YouTube hosts | Exact hostnames accepted |
-| `CLIPFORGE_YOUTUBE_MAX_BYTES` | `2147483648` | Maximum download size |
-| `CLIPFORGE_LLM_API_KEY` | *(unset)* | Reserved for Phase 4 — backend only |
+```
+CLIPFORGE_ENVIRONMENT=development
+CLIPFORGE_HOST=127.0.0.1
+CLIPFORGE_PORT=8000
+CLIPFORGE_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+CLIPFORGE_STORAGE_DIR=data
+CLIPFORGE_TRANSCRIPTION_MODEL=tiny.en
+CLIPFORGE_TRANSCRIPTION_OFFLINE=false
+```
 
-### Frontend — `frontend/.env.local`
+The API has no authentication, so it only binds to this machine. Set
+`CLIPFORGE_ALLOW_LAN_BINDING=true` to expose it to the network.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` | Base URL the browser calls |
+The AI provider configuration is **not** in `.env`: it is saved in the
+database and managed from the Integrations page, and the key lives in the
+operating system's credential store.
 
-**Secret rules**
-
-- API keys live only in `backend/.env` (git-ignored) and only in
-  `CLIPFORGE_LLM_*` variables.
-- Never put a secret in a `NEXT_PUBLIC_*` variable: Next.js inlines those into
-  the browser bundle, where anybody can read them.
-- The backend stores secrets as `SecretStr`, so they are masked in logs and
-  dumps, and never appear in an API response.
+Resource bounds (defaults): upload 2 GiB, video duration 4 h, transcription
+timeout 1 h, clip render 5 min, format render 10 min, export 50 clips / 1 GiB,
+one highlight analysis 15 min (`CLIPFORGE_AI_ANALYSIS_DEADLINE_SECONDS`) with
+each provider window retried up to 3 times.
 
 ---
 
-## Running the applications
+## Running the application
 
-**Three terminals**: the API, the worker and the frontend.
-
-**Terminal 1 — API** (from `backend/`):
+### One command
 
 ```powershell
-..\.venv\Scripts\Activate.ps1
-python run.py
+cd clipforge
+.\scripts\start-local.ps1                        # API on 8000, worker, frontend on 3000
+.\scripts\start-local.ps1 -ApiPort 19400 -FrontendPort 14400
 ```
 
-`python run.py` starts Uvicorn with auto-reload on the configured host and
-port. The equivalent explicit command is:
+`scripts/start-local.ps1` starts the API, then the worker, then the frontend,
+gates each step on readiness rather than a fixed delay, logs every process to a
+file under `$env:TEMP\clipforge-local-launch\`, and provides `Stop-ClipForge` to
+stop exactly the processes it started. Use `-Replace` to clear ClipForge
+processes left over from an earlier run.
+
+### Three terminals
+
+The worker is a separate process and is what actually processes the jobs — the
+API only queues them.
+
+### Terminal 1 — API
 
 ```powershell
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+cd backend
+..\.venv\Scripts\python.exe run.py
 ```
 
-**Terminal 2 — worker** (from `backend/`):
+Expected output: `Uvicorn running on http://127.0.0.1:8000`.
+
+### Terminal 2 — worker
 
 ```powershell
-..\.venv\Scripts\Activate.ps1
-python worker.py
+cd backend
+..\.venv\Scripts\python.exe worker.py
 ```
 
-The worker is a separate operating-system process. It uses the same
-configuration and the same database as the API, and it is the only thing that
-downloads or inspects media. Jobs stay in the queue until the worker is
-running, so you can start it later and it will pick up whatever is waiting.
+Expected output: `clipforge.worker | worker <id> started (storage=..., database=clipforge.db)`.
 
-**Terminal 3 — frontend** (from `frontend/`):
+### Terminal 3 — frontend
 
 ```powershell
+cd frontend
 npm run dev
 ```
 
-### Local URLs
+Expected output: `- Local: http://localhost:3000`.
+
+### URLs
 
 | URL | What |
 | --- | --- |
-| http://localhost:3000 | ClipForge frontend |
-| http://localhost:8000/health | Liveness contract |
-| http://localhost:8000/ready | Readiness + implemented capabilities |
-| http://localhost:8000/api/v1 | API name and version |
+| http://localhost:3000 | Frontend |
+| http://localhost:8000/health | `{"status":"ok","service":"clipforge-api"}` |
+| http://localhost:8000/ready | Readiness and capability flags, worker heartbeat, model cache |
+| http://localhost:8000/api/v1 | API metadata |
 | http://localhost:8000/api/v1/jobs | Recent jobs, newest first |
-| http://localhost:8000/docs | Interactive OpenAPI docs |
+| http://localhost:8000/docs | OpenAPI explorer |
+
+Stop any process with `Ctrl+C`. The worker stops claiming new work and finishes
+or releases the job it is on.
+
+### Production build of the frontend
+
+```powershell
+cd frontend
+npm run build
+npm run start
+```
+
+`npm run start` serves the production build on http://localhost:3000.
 
 ---
 
-## How ingestion works
+## Verifying health and readiness
 
-```
-  browser                API                    worker                 disk
-     │                    │                       │                    │
-     │ POST /videos/upload│                       │                    │
-     │───────────────────►│ stream to disk        │                    │
-     │                    │ (limit enforced while │
-     │                    │  the body arrives)    │                    │
-     │                    │ FFprobe validation    │                    │
-     │                    │ INSERT job (queued)   │                    │
-     │◄─── 202 + job id ──│                       │                    │
-     │                    │                       │                    │
-     │                    │      claim job ──────►│                    │
-     │                    │      (atomic)         │ FFprobe inspect ───►│
-     │                    │                       │ UPDATE job         │
-     │ GET /jobs/{id}     │◄── status, progress ──│                    │
+```powershell
+curl http://localhost:8000/health
+curl http://localhost:8000/ready
 ```
 
-`completed` means **ingestion and media inspection finished** — the source is
-stored and verified. It does not mean clips have been generated; that arrives
-in Phase 5.
-
-### Job states
-
-| Status | Meaning |
-| --- | --- |
-| `queued` | Waiting for a worker |
-| `validating` | A worker is checking the source |
-| `downloading` | A worker is fetching an authorised YouTube video |
-| `inspecting` | A worker is reading the media metadata |
-| `completed` | The source is stored and validated |
-| `failed` | The job could not be completed; `error.code` says why |
-| `cancelled` | The job was cancelled |
-
-### Supported source formats
-
-| | Accepted |
-| --- | --- |
-| Containers | `.mp4`, `.mov`, `.m4v`, `.webm`, `.mkv` |
-| Video codecs | `h264`, `hevc`, `vp9`, `av1`, `mpeg4` |
-| Duration | Up to 4 hours by default |
-| Dimensions | Up to 7680 px on a side by default |
-| Size | Up to 2 GiB by default |
-
-The extension is only a first filter. The file is then opened with FFprobe, and
-a file that is not really a video is rejected with `415 unsupported_media_type`.
-
-### Authorised YouTube URLs
-
-- Only `youtube.com`, `www.youtube.com`, `m.youtube.com`, `youtu.be` and
-  `www.youtu.be` are accepted, compared **exactly** — `youtube.com.attacker.example`
-  is not `youtube.com`.
-- Only `http`/`https`, only the default ports, no credentials in the URL.
-- Watch, short, embed and shorts URLs are accepted and normalised to
-  `https://www.youtube.com/watch?v=<id>`.
-- You must tick **"I own this video or have permission to download and reuse
-  it"**. The request is refused without it.
-- The downloader runs without cookies or a login, so it can only reach videos
-  that are publicly available without signing in. Private, age-restricted and
-  region-locked videos fail with a clear error.
-- Set `CLIPFORGE_YOUTUBE_ACQUISITION_MODE=disabled` to refuse every YouTube
-  submission and point users at local uploads instead.
-
-### Storage and retention
-
-```
-backend/data/
-├── uploads/    in-flight uploads; a partial file is deleted on any error
-├── sources/    accepted source videos, named with a server-generated id
-├── temp/       scratch space used by the worker, cleaned up after each job
-└── database/   clipforge.db (SQLite)
-```
-
-- The database stores **relative** paths. Every path is resolved and checked
-  for containment before it is opened, deleted or probed.
-- Original filenames are never used as paths. They are kept only so you can
-  recognise your own file.
-- A source file is **not** deleted when processing fails. Delete
-  `backend/data/sources` by hand to reclaim the space.
-- The whole `data` directory is git-ignored.
+`/ready` reports `config: loaded`, all capability flags, whether the
+transcription model is cached, and the worker heartbeat (`running`,
+`last_seen`). A capability is reported healthy only when it is implemented
+**and** usable; a missing model cache is reported as `transcription_model_cached: false`,
+not as a failure of the feature.
 
 ---
 
-## Tests and quality checks
+## Using the application
 
-Backend (from `backend/`):
+1. Open http://localhost:3000.
+2. **Upload** a local video (or submit an authorised YouTube URL) on the
+   dashboard. The size limit is enforced while the body arrives.
+3. Watch the job progress through extraction, transcription, and (after you
+   configure an integration) highlight detection.
+4. On the **Integrations** page, add a preset or custom endpoint, store the
+   key in the OS credential store, test the connection, and select a default
+   model.
+5. **Generate clips** from highlight candidates. Boundaries are server-authoritative.
+6. **Format** a clip to portrait 9:16 with burned-in captions.
+7. **Revise** a clip (trim) — creates a new revision, original untouched.
+8. **Edit captions** — produces a distinct format fingerprint.
+9. **Export** finished clips to a ZIP.
 
-```powershell
-..\.venv\Scripts\Activate.ps1
-python -m pytest
+Local video stays on disk. Only transcript text is sent to a configured
+remote AI endpoint, and only when you request highlight detection.
+
+---
+
+## Where data is stored
+
+Everything lives under `CLIPFORGE_STORAGE_DIR` (default `backend/data`):
+
+```
+data/
+├── uploads/    # in-flight uploads
+├── sources/    # validated source media
+├── temp/       # scratch space (audio, renders in progress)
+├── clips/      # finished clips
+├── formats/    # formatted (portrait) clips
+├── models/     # cached Whisper weights
+└── database/   # clipforge.db (SQLite)
 ```
 
-Frontend (from `frontend/`):
+Paths in the database are relative to the storage root and resolved with a
+containment check.
 
-```powershell
-npm run typecheck   # next typegen && tsc --noEmit
-npm run lint        # ESLint
-npm test            # Vitest (unit + component)
-npm run build       # production build
-```
+---
 
-See [docs/TESTING.md](docs/TESTING.md) for what each suite covers and how to
-read failures.
+## Security and privacy
+
+- The API binds to loopback by default; LAN binding requires explicit opt-in.
+- CORS lists explicit origins; wildcards are rejected at load time.
+- API keys live in the OS credential store; the database holds only a reference.
+- No plaintext secret fallback; missing store → `SECRET_STORE_UNAVAILABLE`.
+- Media paths are contained to the storage root; client filenames are never
+  used as paths.
+- Subprocesses use argument arrays (`shell=False`), timeouts, and
+  terminate-then-kill-reap.
+- AI transport requires HTTPS for remote, refuses redirects, bounds request
+  and response, and never leaks the key or the provider's error body.
 
 ---
 
 ## Troubleshooting
 
-**`python` is not recognised** — install Python 3.11+ and tick *Add python.exe
-to PATH*, or use the `py` launcher: `py -3.11 -m venv .venv`.
+| Symptom | Likely cause / fix |
+| --- | --- |
+| `Could not determine home directory` | `HOME`/`USERPROFILE` not set in the process environment (common in stripped sandboxes). Set them, e.g. `$env:USERPROFILE='C:\Users\you'`. |
+| `ffprobe` / `ffmpeg` not found | Install FFmpeg and reopen the terminal so PATH updates. |
+| Port already in use | Change `CLIPFORGE_PORT` / the frontend port, or stop the other process. |
+| Worker not running (`/ready` shows `running: false`) | Start `python worker.py` from `backend/`. |
+| Transcription model not cached | Run the cache command in §1.2, or allow the first run to download (offline mode off). |
+| `CLIPFORGE_TRANSCRIPTION_OFFLINE=true` with missing model | Set offline false, cache the model, then re-enable. |
+| Database migration failure | Check logs; restore from a backup of `data/database/`. Never delete the live DB to "fix" it — use a temp storage root for tests. |
+| Credential store unavailable | Ensure the OS keyring is usable (Windows Credential Manager). |
+| AI connection test fails | Verify endpoint URL, key, and that the endpoint speaks one of the supported protocols. |
+| Export exceeds limit | Raise `CLIPFORGE_CLIP_EXPORT_MAX_ITEMS` / `CLIPFORGE_CLIP_EXPORT_MAX_BYTES`, or export fewer/smaller clips. |
+| Stale/interrupted job | Cancel it, or restart the worker; expired leases are recovered automatically. |
+| Hydration errors or an "N Issues" badge in the browser, with `bis_skin_checked` / `bis_register` attributes in the diff | A browser extension is mutating the page before React hydrates — the `bis_*` attributes are the signature of Bitdefender's page scanner, bundled into extensions such as Urban VPN Proxy. Disable or remove the extension (or test in an Incognito window); the app itself has no mismatch, which is verified in an extension-free browser. |
 
-**`Activate.ps1` is blocked by execution policy** — run
-`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` and activate
-again. Alternatively skip activation and call the interpreter directly:
-`..\.venv\Scripts\python.exe -m pytest`.
+---
 
-**"ffprobe is not installed"** — install FFmpeg and make sure `ffprobe` is on
-`PATH`, or set `CLIPFORGE_FFPROBE_PATH` to its full path.
+## Tests
 
-**A job stays `queued` forever** — the worker is not running. Start it with
-`python worker.py` from `backend/`. It will pick up the waiting job.
+```powershell
+# Backend (from backend/)
+..\.venv\Scripts\python.exe -m pytest
 
-**A job stays `validating` or `downloading` forever** — the worker died. Its
-lease expires after `CLIPFORGE_WORKER_LEASE_SECONDS` and the job is queued
-again (or failed if it has used up its attempts). Restarting the worker
-recovers it immediately.
+# Frontend (from frontend/)
+npm test
+npm run typecheck
+npm run lint
+npm run build
+npm run audit:check
+```
 
-**The upload fails with 413** — the file is larger than
-`CLIPFORGE_MAX_UPLOAD_BYTES`. Raise it if you have the disk space.
+E2E scripts (`backend/tests/e2e_*.py`) start real API + worker + FFmpeg +
+real speech model and take minutes; run them serially, one at a time, from
+`backend/`.
 
-**The upload fails with 415** — either the extension is not in the allowlist,
-or FFprobe could not read a video from the file. Check the message; it says
-which of the two it was.
-
-**A YouTube job fails with `acquisition_failed`** — the video could not be
-downloaded. It may be private, region-locked, age-restricted, or already
-removed. Upload a local copy instead.
-
-**The frontend says "Backend unreachable"** — the API is not running or is on a
-different port. Check http://localhost:8000/health, then press **Retry** in
-the header. The frontend reads its URL from `NEXT_PUBLIC_API_BASE_URL` at
-build time: after changing it, restart `npm run dev` (or rebuild).
-
-**CORS error in the browser console** — the browser origin is not in
-`CLIPFORGE_CORS_ORIGINS`. Wildcards are rejected by design, so list the exact
-origin.
-
-**`npm run build` fails to fetch fonts** — `next/font/google` downloads Geist
-at build time. On a machine without internet access, remove the `next/font`
-imports from `src/app/layout.tsx` and use a system font stack instead.
-
-**Windows path errors in the API** — make sure the API and the worker are
-started from the `backend/` directory, so `CLIPFORGE_STORAGE_DIR` and `.env`
-resolve relative to it.
+The ordinary suite never loads the real speech model; `test_real_model.py`
+skips unless the model is already cached.
 
 ---
 
 ## Known limitations
 
-- **No clips are produced yet.** Ingestion stores and validates a source; the
-  transcript, the highlights, the rendered clips and the captions are Phase 3
-  to Phase 6.
-- **YouTube acquisition depends on YouTube.** yt-dlp works against a moving
-  target. A video that downloads today may not tomorrow, and videos that
-  require a sign-in or a region check are refused by design.
-- **No job cancellation.** The state machine defines a `cancelled` status, but
-  no API can reach it yet. There is deliberately no cancel button in the UI.
-- **No authentication.** The API binds `127.0.0.1` and is a local tool only.
-- **The local development server is not a hardened upload gateway.** It is
-  Uvicorn behind no proxy, with no rate limiting and no request-size limit
-  beyond the configured upload cap.
-- **`npm audit` reports advisories** in the dev-only ESLint plugin chain
-  (`braces` via `micromatch` via `fast-glob`). There is no patched `braces`
-  release; the only "fix" npm offers is downgrading `eslint-config-next` to
-  v14, which breaks the Next.js 16 lint setup. The affected code only runs
-  during linting and is not part of the shipped application.
-- **The frontend has no routing, no job detail page and no clip editor** —
-  those are Phases 7 and 8.
-- **No end-to-end browser automation.** The Phase 2 integration check was done
-  by hand in a real browser; browser automation is scheduled for Phase 9.
+- No repeatable browser automation is available on this install (no
+  Playwright/Cypress/Selenium; the built-in preview cannot attach). UI was
+  verified over HTTP and via component tests.
+- Cancellation stops the work, not only the bookkeeping (decision D55): a
+  cancelled job fails its queued clips, formats and analyses in the same
+  transaction, and an in-flight yt-dlp download, clip render or format render
+  is terminated within one lease tick. A cancel that lands inside the bounded
+  (≤ 60 s) verification step is picked up at the next tick boundary, not
+  mid-probe. Cancelled results are never published.
+- No live paid-provider verification: every protocol-adapter and analysis test
+  runs against a local deterministic mock endpoint, so the shape of a real
+  vendor's answer is not asserted anywhere.
+- Highlight analyses on long transcripts are bounded by
+  `CLIPFORGE_AI_ANALYSIS_DEADLINE_SECONDS`; a reasoning model that needs
+  longer than that has to be given a bigger deadline rather than a retry.
+- The ZIP is assembled into a temporary file and streamed, but the whole
+  archive still occupies disk for the duration of the response.
+- Dependency audit: `npm run audit:check` **currently fails**. Its accepted
+  baseline is the old dev-only `braces` advisory (GHSA-vfj7-8cjw-p6xm), but
+  `npm audit` now reports GHSA-g3hv-75wg-m249 — a moderate denial of service in
+  `minimatch` (`<11.0.1`) that reaches the 16 dev-only packages of the ESLint /
+  `typescript-eslint` chain, with no viable fix: npm's only suggestion is a
+  semver-major downgrade of `eslint` to v4, which cannot read this project's
+  flat config. The baseline has not been widened without a decision; `npm run
+  lint` passes. See [AGENTS.md](AGENTS.md).
 
 ---
 
 ## Documentation
 
-| Document | Contents |
-| --- | --- |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Boundaries, request flow, job model, storage, claiming, recovery |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Copy-pasteable PowerShell commands |
-| [docs/TESTING.md](docs/TESTING.md) | Suites, commands, how to read failures |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | The ten phases and their status |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Architectural decisions and reasoning |
-| [PHASE_1_REPORT.md](PHASE_1_REPORT.md) | Phase 1: what was built, what was verified |
-| [PHASE_2_REPORT.md](PHASE_2_REPORT.md) | Phase 2: what was built, what was verified |
-
----
-
-## Legal note
-
-YouTube ingestion only works for videos you own or have permission to download
-and reuse. It respects the copyright of the source material, the access
-permissions of the account, and YouTube's terms of service. The downloader is
-never given cookies or a login, so it can only reach publicly available
-material. Downloading or re-uploading video without authorisation is not
-something ClipForge will do.
+- [QUICK_START.md](QUICK_START.md) — clone to first finished clip, prerequisites and troubleshooting
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — setup and commands
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the pieces are wired
+- [docs/TESTING.md](docs/TESTING.md) — what each suite covers
+- [docs/ROADMAP.md](docs/ROADMAP.md) — phases and acceptance criteria
+- [docs/DECISIONS.md](docs/DECISIONS.md) — numbered decisions
+- [PHASE_10_REPORT.md](PHASE_10_REPORT.md) — final release-readiness report
+- [PHASE_4_RELIABILITY_REPORT.md](PHASE_4_RELIABILITY_REPORT.md) — the AI-pipeline
+  incident after Phase 10, and the decisions that closed it
+- [UI_REVAMP_REPORT.md](UI_REVAMP_REPORT.md) — the dashboard visual pass, with
+  the files it touched and why

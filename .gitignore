@@ -53,3 +53,21 @@ clips/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Agent and tool scratch ----------------------------------------------
+# Working directories and worktrees created by coding agents, never product.
+.claude/
+.qoder/
+graphify-out/
+%SystemDrive%/
+
+# --- Local run artefacts ---------------------------------------------------
+# Output of manual runs on this machine. Real media lives under
+# backend/data/, which is already ignored above.
+logs/
+monitor.md
+monitor_*.log
+run.bat
+scripts/monitor_yt_pipeline.py
+clips_export/
+clips_export.zip

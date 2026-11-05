@@ -12,13 +12,13 @@ assumed or extrapolated.
 
 ## 1. Repository inspection (first step)
 
-The working directory `C:\Users\bhara\Downloads\clipforge` was **empty and was
+The working directory `<repo root>` was **empty and was
 not a Git repository** (`git rev-parse --is-inside-work-tree` → *fatal: not a
 git repository*). `Get-ChildItem -Force -Recurse` returned zero entries.
 
 There was therefore **no existing working code and no user files to preserve**.
 The only file found anywhere on the machine that could have interfered is
-`C:\Users\bhara\package-lock.json` (84 bytes, dated April 2026) — a pre-existing
+`<home>\package-lock.json` (84 bytes, dated April 2026) — a pre-existing
 user file that was **left untouched**. It caused Turbopack to mis-detect the
 workspace root, which is fixed in the project config rather than by touching
 that file (see §5, D12).
@@ -173,7 +173,7 @@ cd backend
 
 ```
 platform win32 -- Python 3.11.9, pytest-9.1.1, pluggy-1.7.0
-rootdir: C:\Users\bhara\Downloads\clipforge\backend
+rootdir: <repo root>\backend
 configfile: pyproject.toml
 testpaths: tests
 collected 16 items
@@ -371,7 +371,7 @@ Full reasoning is in [docs/DECISIONS.md](docs/DECISIONS.md). The short list:
 
 | # | Criterion | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | Existing repository inspected and user changes preserved | **PASS** | Repository was empty; the only pre-existing file on the machine (`C:\Users\bhara\package-lock.json`) was left untouched. See §1 |
+| 1 | Existing repository inspected and user changes preserved | **PASS** | Repository was empty; the only pre-existing file on the machine (`<home>\package-lock.json`) was left untouched. See §1 |
 | 2 | Frontend project created or correctly adapted | **PASS** | `frontend/` — Next.js 16.4.2, TypeScript, Tailwind 4; `npm run build` succeeds; page renders in a browser |
 | 3 | Backend project created or correctly adapted | **PASS** | `backend/` — FastAPI 0.150.0; 16 pytest tests pass; endpoints verified over HTTP |
 | 4 | Environment templates and Git exclusions created | **PASS** | Root, `backend/` and `frontend/` `.env.example`; `.gitignore` covers `.env*`, `.venv`, `node_modules`, `.next`, media and SQLite files; verified by `git status` after `git add -A` |
