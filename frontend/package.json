@@ -1,6 +1,7 @@
 {
   "name": "clipforge-frontend",
   "version": "0.1.0",
+  "description": "ClipForge dashboard: a local-first Next.js 16 front end for turning long videos into captioned short-form clips.",
   "private": true,
   "scripts": {
     "dev": "next dev",
