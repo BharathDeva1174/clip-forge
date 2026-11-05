@@ -388,6 +388,11 @@ What that actually buys you, and what it does not:
   stable `error_code` say what happened; the leases make a job that was
   interrupted safe to pick up again without touching the database.
 
+The same route, written for the agent rather than for you, is
+[AGENTS.md — Driving a job for a human](AGENTS.md#driving-a-job-for-a-human):
+the endpoints in order, what each `completed` actually means, and the instruction
+to copy the finished clips to the folder you named and report the paths.
+
 ---
 
 ## Where data is stored

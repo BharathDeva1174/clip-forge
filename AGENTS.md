@@ -124,6 +124,34 @@ re-creates the diff. Read it, do not remove it.
   database are relative to that root, and every path is resolved with a
   containment check.
 
+## Driving a job for a human
+
+When someone hands you a video and asks for clips, the pipeline is the one they
+built — drive it, do not reimplement it in FFmpeg by hand:
+
+1. `scripts\start-local.ps1` (or `run.py` + `worker.py`), then `GET /ready`:
+   the worker must be `running` and FFmpeg must be on `PATH`.
+2. `POST /api/v1/videos/youtube` with `authorized: true` — that flag is the
+   caller's confirmation, so it comes from them, never from you. A local file
+   goes to `POST /api/v1/videos/upload` instead.
+3. Poll `GET /api/v1/jobs/{id}` until `completed`; the transcript is then at
+   `GET /api/v1/jobs/{id}/transcript`. A `completed` job has a transcript, not
+   clips.
+4. Moment selection needs a configured integration. If none exists, ask for the
+   boundaries instead of inventing them; `backend/.env` never carries a key and
+   the key is never pasted into a chat — it lives in the OS credential store.
+5. `POST /api/v1/jobs/{id}/highlights`, accept candidates, then
+   `POST /api/v1/jobs/{id}/clips` and `POST /api/v1/clips/{id}/formats`. Both
+   the clip and the format have their own lifecycle: poll the record, read
+   `error_code` on failure, `retry` once before diagnosing.
+6. Finished files live under the storage root (`backend/data/clips/`,
+   `backend/data/formats/`). **Copy them to the folder the human asked for and
+   report the paths you wrote** — the storage root is not the delivery point.
+
+Read `/ready`, the process logs under `$env:TEMP\clipforge-local-launch\`, and
+the record's `error_code` before changing anything. A job interrupted by a
+worker restart is recovered by its lease; it is not corruption to fix.
+
 ## Changing the database
 
 `backend/app/db.py` holds `MIGRATIONS` (a list of `(version, statements)`)
