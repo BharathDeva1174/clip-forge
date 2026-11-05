@@ -608,7 +608,7 @@ locally, that the transcript and its segments are stored, that the API
 returns the right timestamps, that a controlled timeout ends the job with
 `transcription_timeout` instead of leaving it `transcribing`, that the worker
 survives that timeout and processes the next job, and that no temporary
-artefact and no child process is left behind. It exits non-zero if any step
+artifact and no child process is left behind. It exits non-zero if any step
 fails.
 
 There are four more, in the same shape:

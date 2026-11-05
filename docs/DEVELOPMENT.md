@@ -450,8 +450,8 @@ To start completely fresh (this deletes every job record):
 Remove-Item -Recurse -Force clipforge\backend\data
 ```
 
-Both are safe: nothing outside `backend\data` is touched, and the directory is
-recreated on the next start.
+All three are safe: nothing outside `backend\data` is touched, and each
+directory is recreated when it is next needed.
 
 ---
 

@@ -38,8 +38,9 @@ What is deliberately *not* in the repository, and must stay that way:
   must not be `git add`ed back.
 
 Never put an API key, token or provider endpoint belonging to this machine into
-a tracked file, a local report or a test fixture. Before pushing, check the
-staged set for key material — the repository has no secret to remove afterwards.
+a tracked file, a local report or a test fixture. Check the staged set for key
+material before pushing: once a secret is in a pushed commit, removing it again
+means rewriting published history.
 
 Do not reset, clean, stash, checkout or "restore" anything.
 

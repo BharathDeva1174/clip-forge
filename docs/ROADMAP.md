@@ -280,7 +280,7 @@ Delivered:
 - A real defect found and fixed: unbounded export memory.
 - End-to-end browser automation is **not** available — no Playwright/Cypress/Selenium and the built-in preview cannot attach. Documented as a limitation, carried forward.
 
-**A repeatable browser workflow is not possible on this install; the gap is documented and honest.**
+**A repeatable browser workflow is not possible on this install; the gap is documented rather than glossed over.**
 
 ---
 
@@ -290,9 +290,9 @@ Local launch and polish.
 
 Delivered:
 
-- A single-command local launch script, `scripts/start-local.ps1`, verified end to end (API → worker → frontend, readiness-gated, not fixed-delay). Logs each process to a file (never a pipe — per the project's pipe-deadlock guidance).
+- A single-command local launch script, `scripts/start-local.ps1`, verified end to end (API → worker → frontend, readiness-gated, not fixed-delay). It logs each process to a file (never a pipe — per the project's pipe-deadlock guidance).
 - A full local-launch and shutdown verification on real ports.
-- Confirmation that the ZIP export resource bound, cancellation semantics, migration/crash-recovery behavior, and offline transcription all behave as documented.
+- Confirmation that the ZIP export resource bound, cancellation semantics, migration/crash-recovery behaviour, and offline transcription all behave as documented.
 - `.env` / `.env.local` were created from the `*.example` templates for local verification (both are git-ignored and never committed).
 - No source file was changed; the only new file is `scripts/start-local.ps1`.
 

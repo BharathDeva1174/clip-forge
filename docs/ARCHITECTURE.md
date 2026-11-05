@@ -2,7 +2,7 @@
 
 This document describes how ClipForge is put together — what **exists today**.
 All ten roadmap phases are implemented, so nothing here is a plan; where a
-behaviour is bounded or deliberately not attempted, it is said as plainly.
+behaviour is bounded or deliberately not attempted, it is said plainly.
 The numbered decisions live in [DECISIONS.md](DECISIONS.md) and the phase list
 with its acceptance criteria in [ROADMAP.md](ROADMAP.md); the per-phase
 verification reports are kept outside this repository.
@@ -552,7 +552,7 @@ backend/data/
   `backend/data/sources` by hand to reclaim the space.
 - The extracted audio lives in a per-job directory under `temp/` and is
   **deleted** as soon as the transcript is stored. It is a large, temporary
-  artefact; the transcript is the durable result. Set
+  artifact; the transcript is the durable result. Set
   `CLIPFORGE_AUDIO_TEMP_RETENTION=keep` to keep it for inspection.
 - The model cache is the only large download. It is written by the model
   library, not by ClipForge, and can be deleted by hand at any time.
@@ -590,7 +590,7 @@ result again. The file is only accepted if it really is mono, really is
 16 kHz, really is PCM and really has a duration. Anything else is an error.
 
 - The output file name is generated inside the service, so an extraction can
-  never overwrite a source video or another job's artefact.
+  never overwrite a source video or another job's artifact.
 - FFmpeg's stderr goes to a temporary file rather than a pipe: a pipe has a
   fixed buffer, and a child that fills it while the parent is not reading
   would block forever.
@@ -621,7 +621,7 @@ Two real-world cases are handled explicitly:
   to 20 ms and are produced from a 30-second sliding window, so the end of the
   last segment regularly points *past* the end of the audio — by up to a whole
   window. Such a timestamp is pulled back to the end of the audio rather than
-  rejected, because it is a known artefact of the model and not a broken
+  rejected, because it is a known artifact of the model and not a broken
   value. A timestamp further out than that allowance is rejected.
 - **A segment can lie entirely outside the audio.** That is what a
   hallucination over trailing silence looks like. There is no honest timestamp
@@ -724,7 +724,7 @@ start an analysis       ──POST──▶  highlight_analyses (pending)
 read the result         ──GET───▶   highlight_candidates
 ```
 
-Six modules, each with one job:
+Eight modules, each with one job:
 
 | Module | What it owns |
 | --- | --- |
@@ -1078,7 +1078,6 @@ updates the job row as it goes, and the frontend reads that row.
 | The formatted-clip domain model | `backend/app/formats.py` |
 | The bounded ZIP export | `backend/app/export_service.py` |
 | The fonts this machine has | `backend/app/fonts.py` |
-| The interrupt/cancel signal shared by every long step | `backend/app/interruption.py` |
 | The stable error codes and the error envelope | `backend/app/errors.py` |
 | The request and response models | `backend/app/schemas.py` |
 | The dependencies the routers share | `backend/app/deps.py` |

@@ -199,7 +199,7 @@ which drive the real API and worker over HTTP.
 **Decision.** `frontend/next.config.ts` sets `turbopack.root` to the frontend
 folder.
 
-**Why.** Turbopack walks up the directory tree looking for a workspace root
+**Why.** Turbopack walked up the directory tree looking for a workspace root
 and found an unrelated `package-lock.json` in the user's home directory. That
 made it treat the home directory as the project root — it ignored the real
 lockfile and warned about it on every build. Pinning the root fixes the
@@ -1060,7 +1060,7 @@ a fast provider can finish inside the renewer's first tick, so the thread
 alone cannot rule out a takeover.
 
 **Cost:** a takeover that happens mid-run is now detected at publication
-instead of possibly never; the trade is one extra small database
+instead of possibly never being detected; the trade is one extra small database
 transaction per analysis.
 
 ---
@@ -1130,7 +1130,7 @@ stealable mid-flight) and raises `WorkCancelled` when the parent job is
 cancelled, which the renderers' existing `finally` answers by terminating
 and reaping the FFmpeg child. **A cancelled parent job is terminal**, so
 the artifact is recorded as `failed`/`job_cancelled` rather than queued
-for a retry nobody can want; a worker *shutdown* during a render stays a
+for a retry nobody would want; a worker *shutdown* during a render stays a
 plain interruption and leaves the artifact for lease recovery. Downloads
 already stopped their child through the acquisition loop's own tick and
 `finally`, and transcription already stops through the process
