@@ -20,6 +20,13 @@ letting it finish. Those are decisions D51–D55 in
 [PHASE_4_RELIABILITY_REPORT.md](PHASE_4_RELIABILITY_REPORT.md) records the
 incident behind them.
 
+The `PHASE_*_REPORT.md` files describe the repository **as it stood when each
+phase was verified**, including the stretch where the newest phases were carried
+as uncommitted work. That work is now committed and published to
+[github.com/BharathDeva1174/clip-forge](https://github.com/BharathDeva1174/clip-forge),
+so a sentence in an old report about a dirty working tree is history, not a
+current instruction.
+
 **Just cloned it?** [QUICK_START.md](QUICK_START.md) walks from an empty folder
 to a finished vertical clip: prerequisites, the two `pip`/`npm` installs, the
 one-command launch, the first clip, and how to check the install.
