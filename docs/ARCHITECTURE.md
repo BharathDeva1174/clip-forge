@@ -3,9 +3,9 @@
 This document describes how ClipForge is put together — what **exists today**.
 All ten roadmap phases are implemented, so nothing here is a plan; where a
 behaviour is bounded or deliberately not attempted, it is said as plainly.
-The per-phase evidence lives in the `PHASE_*_REPORT.md` files at the
-repository root and the numbered decisions in
-[DECISIONS.md](DECISIONS.md).
+The numbered decisions live in [DECISIONS.md](DECISIONS.md) and the phase list
+with its acceptance criteria in [ROADMAP.md](ROADMAP.md); the per-phase
+verification reports are kept outside this repository.
 
 ---
 

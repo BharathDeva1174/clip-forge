@@ -624,8 +624,8 @@ repository id or a local path.
 
 **Decision.** The five high-severity advisories that `npm audit` reports are
 one advisory — GHSA-vfj7-8cjw-p6xm against `braces` — counted once for
-every package that depends on it. It is accepted, recorded in
-`PHASE_3_1_REPORT.md`, and guarded by `npm run audit:check`, which fails the
+every package that depends on it. It is accepted here, and guarded by
+`npm run audit:check`, which fails the
 moment a *different* advisory appears.
 
 **Why.** There is no patched `braces`: the advisory covers every published
@@ -1174,7 +1174,8 @@ remains the truth.
 ## Resolved decisions (formerly open)
 
 Each entry records what was decided and when. They are kept here so the
-reasoning survives the phase reports.
+reasoning outlives the per-phase reports, which are kept outside this
+repository.
 
 | Question | Decided in | Resolution |
 | --- | --- | --- |

@@ -4,29 +4,27 @@ ClipForge is planned as ten phases. All ten phases are implemented and verified.
 
 | # | Phase | Status |
 | --- | --- | --- |
-| 1 | Project foundation | **Complete** — see [PHASE_1_REPORT.md](../PHASE_1_REPORT.md) |
-| 2 | Video ingestion | **Complete** — see [PHASE_2_REPORT.md](../PHASE_2_REPORT.md) |
-| 3 | Audio extraction and transcription | **Complete** — see [PHASE_3_REPORT.md](../PHASE_3_REPORT.md) |
-| 3.1 | Transcription hardening | **Complete** — see [PHASE_3_1_REPORT.md](../PHASE_3_1_REPORT.md) |
-| 4 | AI integrations and highlight detection | **Complete** - see [PHASE_4_REPORT.md](../PHASE_4_REPORT.md) |
-| 5 | Video clip generation | **Complete** -- see [PHASE_5_REPORT.md](../PHASE_5_REPORT.md) |
-| 6 | Vertical formatting and captions | **Complete** — see [PHASE_6_REPORT.md](../PHASE_6_REPORT.md) |
-| 7 | Frontend dashboard | **Complete** — see [PHASE_7_REPORT.md](../PHASE_7_REPORT.md) |
-| 8 | Editing and exports | **Complete** — see [PHASE_8_REPORT.md](../PHASE_8_REPORT.md) |
-| 9 | Reliability and testing | **Complete** — see [PHASE_9_REPORT.md](../PHASE_9_REPORT.md) |
-| 10 | Local launch and polish | **Complete** — see [PHASE_10_REPORT.md](../PHASE_10_REPORT.md) |
+| 1 | Project foundation | **Complete** |
+| 2 | Video ingestion | **Complete** |
+| 3 | Audio extraction and transcription | **Complete** |
+| 3.1 | Transcription hardening | **Complete** |
+| 4 | AI integrations and highlight detection | **Complete** |
+| 5 | Video clip generation | **Complete** |
+| 6 | Vertical formatting and captions | **Complete** |
+| 7 | Frontend dashboard | **Complete** |
+| 8 | Editing and exports | **Complete** |
+| 9 | Reliability and testing | **Complete** |
+| 10 | Local launch and polish | **Complete** |
 
 Each phase is only marked complete once its acceptance criteria have been
-verified with real evidence. The evidence for every phase is recorded in its
-report.
+verified with real evidence. That evidence is written up per phase in reports
+kept outside this repository; the criteria below are what they were checked
+against.
 
-Work continued after Phase 10: the highlight-detection reliability incident
-was investigated and fixed (see
-[PHASE_4_RELIABILITY_REPORT.md](../PHASE_4_RELIABILITY_REPORT.md)), and
-cancellation was hardened to stop in-flight children and reach queued work
-(decision D55). Both are recorded in
-[docs/DECISIONS.md](DECISIONS.md) and are the current behaviour — the phase
-reports that predate them describe the older semantics.
+Work continued after Phase 10: the highlight-detection reliability incident was
+investigated and fixed, and cancellation was hardened to stop in-flight
+children and reach queued work (decision D55). Both are recorded in
+[docs/DECISIONS.md](DECISIONS.md) and are the current behaviour.
 
 ---
 
@@ -314,7 +312,7 @@ Nothing below is a phase; each is a known, current gap against the tree.
 | Item | State | What it needs |
 | --- | --- | --- |
 | Repeatable browser automation | Still unavailable on this install — the documented Phase 9/10 limitation | A machine where Playwright (or similar) can attach; UI is verified over HTTP and by component tests in the meantime |
-| `npm run audit:check` fails (31 October 2026) | GHSA-g3hv-75wg-m249, a moderate denial of service in `minimatch` (`<11.0.1`), reaches the 16 dev-only packages of the ESLint / `typescript-eslint` chain. The old `braces` advisory the baseline accepts is no longer reported, so the check now refuses to pass. npm's only offered fix is a semver-major downgrade of `eslint` to v4, which cannot read this project's flat config | A decision, not a code change: either widen `ACCEPTED_ADVISORIES` in `frontend/scripts/check-audit.mjs` and record the reasoning in `PHASE_3_1_REPORT.md`, or move the lint toolchain. `npm run lint` passes either way |
+| `npm run audit:check` fails (31 October 2026) | GHSA-g3hv-75wg-m249, a moderate denial of service in `minimatch` (`<11.0.1`), reaches the 16 dev-only packages of the ESLint / `typescript-eslint` chain. The old `braces` advisory the baseline accepts is no longer reported, so the check now refuses to pass. npm's only offered fix is a semver-major downgrade of `eslint` to v4, which cannot read this project's flat config | A decision, not a code change: either widen `ACCEPTED_ADVISORIES` in `frontend/scripts/check-audit.mjs` and record the reasoning in `docs/DECISIONS.md`, or move the lint toolchain. `npm run lint` passes either way |
 | Live paid-provider verification | Every protocol adapter and analysis test runs against a local deterministic mock; the shape of a real vendor's answer is not asserted anywhere | One manual run against a real endpoint, recorded like the other evidence |
 
 **Closed since the Phase 10 report:** `API_STAGE` no longer reads

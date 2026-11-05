@@ -8,9 +8,12 @@ FastAPI + SQLite + a separate worker process on the back end; Next.js 16
 how the pieces are wired, and `docs/TESTING.md` for what each suite covers.
 This file is the stuff that is easy to get wrong.
 
-`PHASE_*.md` at the repository root are the per-phase reports. They record
-what was decided, what was verified and what is still limited — read the
-latest one before changing that area, rather than re-deriving it.
+The per-phase reports (`PHASE_*_REPORT.md`, `UI_REVAMP_REPORT.md`) record what
+was decided, what was verified and what is still limited. They are **kept
+outside this repository** — local files, git-ignored, never to be re-added.
+What survives here is [docs/ROADMAP.md](docs/ROADMAP.md) (phases and their
+acceptance criteria) and [docs/DECISIONS.md](docs/DECISIONS.md) (the numbered
+decisions). Read those two before changing an area, rather than re-deriving it.
 
 ## The published tree
 
@@ -30,9 +33,12 @@ What is deliberately *not* in the repository, and must stay that way:
 - Local run scratch: `logs/`, `monitor.md`, `monitor_*.log`, `run.bat`,
   `clips_export*/`, `scripts/monitor_yt_pipeline.py`, `.claude/`, `.qoder/`,
   `.openchamber/` and the `%SystemDrive%/` directory created by a bad quote.
+- The per-phase write-ups: `PHASE_*_REPORT.md` and `UI_REVAMP_REPORT.md`. They
+  stay on this machine as the verification record; they are not published and
+  must not be `git add`ed back.
 
 Never put an API key, token or provider endpoint belonging to this machine into
-a tracked file, a phase report or a test fixture. Before pushing, check the
+a tracked file, a local report or a test fixture. Before pushing, check the
 staged set for key material — the repository has no secret to remove afterwards.
 
 Do not reset, clean, stash, checkout or "restore" anything.

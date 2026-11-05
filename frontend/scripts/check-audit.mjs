@@ -140,7 +140,7 @@ if (unexpected.length > 0) {
   console.error(
     "\nThese are not the accepted advisories (braces GHSA-vfj7-8cjw-p6xm, " +
       "minimatch GHSA-g3hv-75wg-m249). Fix them, or record the decision in " +
-      "PHASE_3_1_REPORT.md and update ACCEPTED_ADVISORIES in " +
+      "docs/DECISIONS.md and update ACCEPTED_ADVISORIES in " +
       "scripts/check-audit.mjs.",
   );
   process.exit(1);

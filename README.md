@@ -8,24 +8,21 @@ your own LLM API key (optional).
 **Status: Phase 10 — Local Launch & Polish.** All ten phases are implemented
 and verified: video ingestion, transcription, AI highlight detection, clip
 rendering, vertical formatting with burned-in captions, revisions, caption
-overrides, and ZIP export. See [docs/ROADMAP.md](docs/ROADMAP.md) and the
-`PHASE_*_REPORT.md` files for the evidence.
+overrides, and ZIP export. See [docs/ROADMAP.md](docs/ROADMAP.md) for the phase
+list and the acceptance criteria each phase was verified against.
 
 Work continued after Phase 10 on the reliability of the AI pipeline and on
 cancellation: a running highlight analysis now renews its lease during the
 provider call and is bounded by an analysis deadline, and cancelling a job
 stops the in-flight download or render within one lease tick instead of
-letting it finish. Those are decisions D51–D55 in
-[docs/DECISIONS.md](docs/DECISIONS.md), and
-[PHASE_4_RELIABILITY_REPORT.md](PHASE_4_RELIABILITY_REPORT.md) records the
-incident behind them.
+letting it finish. Those are decisions D51–D56 in
+[docs/DECISIONS.md](docs/DECISIONS.md).
 
-The `PHASE_*_REPORT.md` files describe the repository **as it stood when each
-phase was verified**, including the stretch where the newest phases were carried
-as uncommitted work. That work is now committed and published to
-[github.com/BharathDeva1174/clip-forge](https://github.com/BharathDeva1174/clip-forge),
-so a sentence in an old report about a dirty working tree is history, not a
-current instruction.
+The per-phase verification reports — what each phase decided, what was
+actually run, and what was left limited — are kept on the author's machine and
+are **not** part of this repository. The durable conclusions live in
+[docs/ROADMAP.md](docs/ROADMAP.md) and [docs/DECISIONS.md](docs/DECISIONS.md),
+so nothing that is published here points at a file that is not.
 
 **Just cloned it?** [QUICK_START.md](QUICK_START.md) walks from an empty folder
 to a finished vertical clip: prerequisites, the two `pip`/`npm` installs, the
@@ -93,8 +90,7 @@ clipforge/
 ├── .env.example               # Root template (points at the two app templates)
 ├── README.md
 ├── QUICK_START.md             # Clone → first finished clip
-├── AGENTS.md
-└── PHASE_*_REPORT.md          # Per-phase evidence reports
+└── AGENTS.md
 ```
 
 The virtual environment lives at `..\.venv` — at the repository root, not
@@ -452,8 +448,3 @@ skips unless the model is already cached.
 - [docs/TESTING.md](docs/TESTING.md) — what each suite covers
 - [docs/ROADMAP.md](docs/ROADMAP.md) — phases and acceptance criteria
 - [docs/DECISIONS.md](docs/DECISIONS.md) — numbered decisions
-- [PHASE_10_REPORT.md](PHASE_10_REPORT.md) — final release-readiness report
-- [PHASE_4_RELIABILITY_REPORT.md](PHASE_4_RELIABILITY_REPORT.md) — the AI-pipeline
-  incident after Phase 10, and the decisions that closed it
-- [UI_REVAMP_REPORT.md](UI_REVAMP_REPORT.md) — the dashboard visual pass, with
-  the files it touched and why

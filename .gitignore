@@ -71,3 +71,7 @@ run.bat
 scripts/monitor_yt_pipeline.py
 clips_export/
 clips_export.zip
+
+# --- Per-phase verification reports (local record, not published) ----------
+/PHASE_*_REPORT.md
+/UI_REVAMP_REPORT.md

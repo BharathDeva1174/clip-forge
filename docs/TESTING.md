@@ -494,8 +494,8 @@ directly.
 ## 4. Integration checks (manual, the API and the worker running)
 
 These are not automated because they need live processes. They were run
-manually in Phase 3; see [PHASE_3_REPORT.md](../PHASE_3_REPORT.md) for the
-recorded results.
+manually in Phase 3 and the recorded results live in the per-phase reports,
+which are kept outside this repository.
 
 Start the API and the worker, then:
 
