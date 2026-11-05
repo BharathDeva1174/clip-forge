@@ -3,6 +3,11 @@
 
 * text=auto eol=lf
 
+# cmd.exe reads batch files line by line and behaves best with CRLF; the
+# Windows launchers are authored and tested that way.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
 # Binary assets
 *.ico binary
 *.jpg binary

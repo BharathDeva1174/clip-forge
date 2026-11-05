@@ -315,5 +315,12 @@ Nothing below is a phase; each is a known, current gap against the tree.
 | --- | --- | --- |
 | Repeatable browser automation | Still unavailable on this install — the documented Phase 9/10 limitation | A machine where Playwright (or similar) can attach; UI is verified over HTTP and by component tests in the meantime |
 | `npm run audit:check` fails (31 October 2026) | GHSA-g3hv-75wg-m249, a moderate denial of service in `minimatch` (`<11.0.1`), reaches the 16 dev-only packages of the ESLint / `typescript-eslint` chain. The old `braces` advisory the baseline accepts is no longer reported, so the check now refuses to pass. npm's only offered fix is a semver-major downgrade of `eslint` to v4, which cannot read this project's flat config | A decision, not a code change: either widen `ACCEPTED_ADVISORIES` in `frontend/scripts/check-audit.mjs` and record the reasoning in `PHASE_3_1_REPORT.md`, or move the lint toolchain. `npm run lint` passes either way |
-| `API_STAGE` still reads `phase-3-transcription` | `backend/app/config.py` reports that string in the startup log and the API metadata, although Phases 4 to 10 are implemented. Documentation and the UI never quote it, so nothing users read is wrong | Set it to a stage that describes the build, in the same change that touches `API_VERSION` |
 | Live paid-provider verification | Every protocol adapter and analysis test runs against a local deterministic mock; the shape of a real vendor's answer is not asserted anywhere | One manual run against a real endpoint, recorded like the other evidence |
+
+**Closed since the Phase 10 report:** `API_STAGE` no longer reads
+`phase-3-transcription` — `backend/app/config.py:31` reports
+`phase-10-local-launch` alongside `API_VERSION` `1.2.0`, so the startup log and
+the `/api/v1` metadata describe the build that exists. The repository is now
+published at https://github.com/BharathDeva1174/clip-forge, which is why
+[QUICK_START.md](../QUICK_START.md) exists and why no environment file,
+database, media or provider configuration is tracked.
