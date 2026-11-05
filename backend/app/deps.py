@@ -12,7 +12,9 @@ from collections.abc import Iterator
 
 from fastapi import Request
 
+from app.ai_client import AiClient
 from app.config import Settings
+from app.credentials import CredentialStore
 from app.db import session
 from app.storage import Storage
 
@@ -25,6 +27,21 @@ def get_settings(request: Request) -> Settings:
 def get_storage(request: Request) -> Storage:
     """The storage layout for the application."""
     return request.app.state.storage
+
+
+def get_ai_client(request: Request) -> AiClient:
+    """The client used to talk to AI providers.
+
+    It is on the application state so that a test can put a client with a
+    mocked transport in its place, and so that the whole application
+    shares one configured client.
+    """
+    return request.app.state.ai_client
+
+
+def get_credential_store(request: Request) -> CredentialStore:
+    """The credential store the application saves API keys in."""
+    return request.app.state.credential_store
 
 
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:

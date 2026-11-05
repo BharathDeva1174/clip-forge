@@ -5,10 +5,17 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/*
+ * The palette: a near-black canvas (pure black strains the eye), barely
+ * visible elevation steps, and one warm accent — ember — that carries every
+ * primary action. Status colours are desaturated and only ever appear in
+ * small doses: a dot, a badge, a thin bar.
+ */
 @theme {
   --color-canvas: #0a0b0d;
   --color-surface: #121418;
   --color-raised: #191c21;
+  --color-surface-raised: #15181e;
   --color-line: #272b32;
   --color-line-strong: #363b44;
   --color-ink: #edeff3;
@@ -31,10 +38,126 @@
   body {
     background-color: var(--color-canvas);
     color: var(--color-ink);
+    /*
+     * Two almost-invisible glows anchor the top of every page: the ember
+     * one above the fold, a colder one far to the side. They give the
+     * canvas depth without competing with the content.
+     */
+    background-image:
+      radial-gradient(
+        52rem 22rem at 12% -4rem,
+        rgba(255, 122, 24, 0.055),
+        transparent 70%
+      ),
+      radial-gradient(
+        40rem 20rem at 92% -6rem,
+        rgba(120, 140, 255, 0.03),
+        transparent 70%
+      );
+    background-repeat: no-repeat;
   }
 
   ::selection {
     background-color: color-mix(in srgb, var(--color-ember-500) 35%, transparent);
+  }
+
+  /*
+   * A visible focus ring, in the app's own accent.
+   *
+   * The browser's default is a blue outline that clashes with the palette,
+   * and on these dark surfaces it is easy to miss. `:focus-visible`
+   * rather than `:focus`, so a ring appears for a keyboard and not for a
+   * mouse click.
+   */
+  :focus-visible {
+    outline: 2px solid var(--color-ember-400);
+    outline-offset: 2px;
+  }
+
+  /*
+   * A quiet scrollbar in the app's own greys. The default bright one is
+   * the loudest thing on a dark page.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+}
+
+@layer components {
+  /*
+   * The one card. Every panel on every page is built from this: a raised
+   * surface, a hairline border, and a shadow that is felt rather than seen.
+   */
+  .card {
+    border-radius: 1rem;
+    border: 1px solid var(--color-line);
+    background-color: var(--color-surface);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.4),
+      0 8px 24px -16px rgba(0, 0, 0, 0.5);
+  }
+
+  /*
+   * A card the user can act on: it lifts a little and warms its border
+   * on hover, so a row of cards reads as a row of doors.
+   */
+  .card-interactive {
+    transition:
+      border-color 150ms ease,
+      transform 150ms ease,
+      box-shadow 150ms ease;
+  }
+  .card-interactive:hover {
+    border-color: color-mix(in srgb, var(--color-ember-500) 35%, var(--color-line));
+    transform: translateY(-1px);
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.4),
+      0 12px 32px -16px rgba(0, 0, 0, 0.6);
+  }
+
+  /*
+   * The small uppercase label that introduces a section or a stat.
+   */
+  .eyebrow {
+    font-size: 11px;
+    line-height: 1;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  /*
+   * Numbers that line up in a column: ids, durations, counts. Applied on
+   * top of the mono font wherever a figure is compared with its neighbours.
+   */
+  .numeric {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
   }
 }
 

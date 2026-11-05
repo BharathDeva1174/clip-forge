@@ -2,9 +2,9 @@
 # Install with:  pip install -r requirements-dev.txt
 # Includes the runtime dependencies.
 #
-# httpx2 is the HTTPX 2.x distribution that Starlette's TestClient expects.
+# httpx2 is a runtime dependency: it is the client the provider adapters
+# use, and the tests mock its transport.
 
 -r requirements.txt
 
 pytest==9.1.1
-httpx2==2.15.1

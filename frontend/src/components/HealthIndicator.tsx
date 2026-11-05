@@ -48,7 +48,9 @@ export default function HealthIndicator({ baseUrl }: { baseUrl: string }) {
               aria-hidden="true"
               className="size-2 animate-pulse rounded-full bg-warn"
             />
-            <span className="text-ink-muted">Checking backend…</span>
+            <span className="sr-only sm:not-sr-only text-ink-muted">
+              Checking backend…
+            </span>
           </>
         )}
 
@@ -58,7 +60,11 @@ export default function HealthIndicator({ baseUrl }: { baseUrl: string }) {
               aria-hidden="true"
               className="size-2 rounded-full bg-ok shadow-[0_0_8px] shadow-ok/60"
             />
-            <span className="text-ink">Backend online</span>
+            {/* The dot is enough on a narrow screen; the words stay for a
+                screen reader either way. */}
+            <span className="sr-only sm:not-sr-only text-ink">
+              Backend online
+            </span>
             <span className="hidden text-ink-faint sm:inline">
               {status.service}
             </span>
@@ -71,7 +77,9 @@ export default function HealthIndicator({ baseUrl }: { baseUrl: string }) {
               aria-hidden="true"
               className="size-2 rounded-full bg-bad shadow-[0_0_8px] shadow-bad/60"
             />
-            <span className="text-ink">Backend unreachable</span>
+            <span className="sr-only sm:not-sr-only text-ink">
+              Backend unreachable
+            </span>
             <button
               type="button"
               onClick={retry}

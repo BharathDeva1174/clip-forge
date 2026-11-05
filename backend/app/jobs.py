@@ -30,6 +30,8 @@ class JobStatus(StrEnum):
     VALIDATING = "validating"
     DOWNLOADING = "downloading"
     INSPECTING = "inspecting"
+    EXTRACTING_AUDIO = "extracting_audio"
+    TRANSCRIBING = "transcribing"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -38,15 +40,17 @@ class JobStatus(StrEnum):
 class JobStage(StrEnum):
     """The pipeline step a job is currently on.
 
-    Finer grained than the status: ``COMPLETED`` always has the stage
-    ``READY`` in Phase 2, because ingestion finished and the source is stored
-    and validated. Later phases add their own stages.
+    Finer grained than the status. Since Phase 3 a ``COMPLETED`` job has the
+    stage ``READY`` only after its transcript has been committed to SQLite, so
+    ``completed`` now means *the source was ingested **and** transcribed*.
     """
 
     QUEUED = "queued"
     VALIDATING = "validating"
     DOWNLOADING = "downloading"
     INSPECTING = "inspecting"
+    EXTRACTING_AUDIO = "extracting_audio"
+    TRANSCRIBING = "transcribing"
     READY = "ready"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -59,7 +63,13 @@ TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
 
 #: Statuses a job can be in while a worker owns it.
 ACTIVE_STATUSES: frozenset[JobStatus] = frozenset(
-    {JobStatus.VALIDATING, JobStatus.DOWNLOADING, JobStatus.INSPECTING}
+    {
+        JobStatus.VALIDATING,
+        JobStatus.DOWNLOADING,
+        JobStatus.INSPECTING,
+        JobStatus.EXTRACTING_AUDIO,
+        JobStatus.TRANSCRIBING,
+    }
 )
 
 #: The only transitions the job API and the worker may perform.
@@ -67,6 +77,10 @@ ACTIVE_STATUSES: frozenset[JobStatus] = frozenset(
 #: ``completed``/``failed``/``cancelled`` are terminal. Moving a job out of a
 #: terminal status is only possible through the explicit recovery path in
 #: :mod:`app.db`, never through an ordinary update.
+#:
+#: Since Phase 3 a job cannot go straight from ``inspecting`` to ``completed``:
+#: it has to pass through ``extracting_audio`` and ``transcribing`` first, so
+#: that ``completed`` always implies that a transcript was committed.
 ALLOWED_TRANSITIONS: dict[JobStatus, frozenset[JobStatus]] = {
     JobStatus.QUEUED: frozenset(
         {JobStatus.VALIDATING, JobStatus.DOWNLOADING, JobStatus.FAILED, JobStatus.CANCELLED}
@@ -78,6 +92,12 @@ ALLOWED_TRANSITIONS: dict[JobStatus, frozenset[JobStatus]] = {
         {JobStatus.INSPECTING, JobStatus.FAILED, JobStatus.CANCELLED}
     ),
     JobStatus.INSPECTING: frozenset(
+        {JobStatus.EXTRACTING_AUDIO, JobStatus.FAILED, JobStatus.CANCELLED}
+    ),
+    JobStatus.EXTRACTING_AUDIO: frozenset(
+        {JobStatus.TRANSCRIBING, JobStatus.FAILED, JobStatus.CANCELLED}
+    ),
+    JobStatus.TRANSCRIBING: frozenset(
         {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
     ),
     JobStatus.COMPLETED: frozenset(),
@@ -90,7 +110,17 @@ PROGRESS_QUEUED = 0
 PROGRESS_VALIDATING = 10
 PROGRESS_DOWNLOADING = 30
 PROGRESS_INSPECTING = 70
+PROGRESS_EXTRACTING_AUDIO = 80
+PROGRESS_TRANSCRIBING = 85
 PROGRESS_READY = 100
+
+#: The highest progress value a running transcription may report.
+#:
+#: Transcription progress is *approximate*: it is derived from how far the
+#: decoder has progressed through the audio, not from an exact percentage. It
+#: is therefore reported inside the 85–99 band and labelled as approximate by
+#: the API, so that a client never presents it as an exact figure.
+PROGRESS_TRANSCRIPTION_MAX = 99
 
 
 class InvalidTransitionError(RuntimeError):
@@ -100,6 +130,26 @@ class InvalidTransitionError(RuntimeError):
         super().__init__(f"cannot move a job from {current.value} to {new.value}")
         self.current = current
         self.new = new
+
+
+@dataclass(frozen=True, slots=True)
+class JobArtifacts:
+    """What a job has produced, counted from the database.
+
+    The dashboard shows these numbers, so they are counted rather than
+    guessed. Every one of them is zero or absent when the thing has not
+    happened yet, which is what lets the interface say "no clips yet"
+    instead of implying that there are none.
+    """
+
+    #: The status of the most recent highlight analysis, when there is one.
+    analysis_status: str | None = None
+    #: How many highlight candidates that analysis produced.
+    candidate_count: int = 0
+    #: How many clips have been made from this job.
+    clip_count: int = 0
+    #: How many formatted (9:16) artifacts have been made from this job.
+    format_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import re
 import subprocess
 import sys
 import time
@@ -124,6 +125,7 @@ class YtDlpAcquirer:
         max_bytes: int,
         timeout_seconds: int,
         on_tick: object | None = None,
+        on_progress: object | None = None,
     ) -> Path:
         """Download the video into ``destination_dir`` and return its path."""
         if not self.available():
@@ -140,7 +142,9 @@ class YtDlpAcquirer:
             "yt_dlp",
             "--no-playlist",
             "--no-warnings",
-            "--no-progress",
+            # Progress is emitted to stderr so the worker can report it to
+            # the job record while the download runs.
+            "--progress",
             "--no-color",
             "--no-simulate",
             "--max-filesize",
@@ -170,22 +174,52 @@ class YtDlpAcquirer:
             "acquiring youtube video %s into %s", video.video_id, destination_dir.name
         )
 
+        # A retry reuses this directory (its name is the job id). Anything in
+        # here belongs to a dead previous attempt -- the lease guarantees a
+        # single live downloader per job -- so clear it before starting, or a
+        # stale .part could collide with this attempt's download.
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        for stale in destination_dir.iterdir():
+            try:
+                stale.unlink()
+            except OSError:
+                # A file still held open by a truly orphaned child cannot be
+                # removed on Windows; yt-dlp overwrites it anyway.
+                pass
+
+        #: A child process's stdout/stderr must go to a file, never a pipe:
+        #: a pipe fills after about 4 KB and the child blocks on write, which
+        #: looks exactly like a hung download (see AGENTS.md). Redirect to
+        #: log files in the destination directory instead.
+        stdout_log = destination_dir / "yt-dlp.stdout.log"
+        stderr_log = destination_dir / "yt-dlp.stderr.log"
+        stdout_handle = open(stdout_log, "wb")
+        stderr_handle = open(stderr_log, "wb")
         try:
             process = subprocess.Popen(  # noqa: S603 - argument list, never a shell
                 args,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=stdout_handle,
+                stderr=stderr_handle,
                 shell=False,
             )
         except OSError as exc:
+            stdout_handle.close()
+            stderr_handle.close()
             raise AcquisitionError(
                 ErrorCode.ACQUISITION_FAILED.value,
                 "The downloader could not be started.",
             ) from exc
 
+        # Close our handle copies: the child inherited duplicates and keeps
+        # writing to them. Closing ours lets us reopen the log files for
+        # reading while the download runs, which we use to parse progress.
+        stdout_handle.close()
+        stderr_handle.close()
+
         self._process = process
         started = time.monotonic()
+        last_progress = 0
         try:
             while True:
                 try:
@@ -201,10 +235,30 @@ class YtDlpAcquirer:
                     )
                 if callable(on_tick):
                     on_tick()
+                if callable(on_progress):
+                    pct = _parse_yt_dlp_progress(stdout_log)
+                    if pct is not None and pct > last_progress:
+                        # yt-dlp's first HLS fragment briefly reports 100.0%
+                        # from a tiny estimated total. A stream that really
+                        # finished is followed by the next stream or by exit,
+                        # so a 100 seen while the child is still running is
+                        # that artefact -- latching it would reject every
+                        # later percentage and freeze the job's progress for
+                        # the rest of the download.
+                        if pct >= 100 and process.poll() is None:
+                            continue
+                        last_progress = pct
+                        on_progress(pct)
         finally:
+            # Every exit path -- normal exit, timeout, cancellation, any
+            # error raised by the callbacks -- must not leave the child
+            # running: an orphan keeps downloading into the scratch
+            # directory and collides with the next attempt's files.
+            if process.poll() is None:
+                self.terminate()
             self._process = None
 
-        stderr = _read_bounded(process.stderr)
+        stderr = _read_bounded_path(stderr_log)
         if process.returncode != 0:
             logger.warning(
                 "yt-dlp exited with %s for video %s: %s",
@@ -252,10 +306,15 @@ class YtDlpAcquirer:
 
     @staticmethod
     def _find_downloaded_file(destination_dir: Path) -> Path | None:
+        # The progress and diagnostic logs live in the same directory as the
+        # download; they are not media, whatever their size.
+        log_names = ("yt-dlp.stdout.log", "yt-dlp.stderr.log")
         candidates = [
             path
             for path in destination_dir.iterdir()
-            if path.is_file() and not path.name.endswith((".part", ".ytdl", ".temp"))
+            if path.is_file()
+            and not path.name.endswith((".part", ".ytdl", ".temp"))
+            and path.name not in log_names
         ]
         if not candidates:
             return None
@@ -273,6 +332,36 @@ def _read_bounded(stream: object) -> str:
     if isinstance(data, bytes):
         return data.decode("utf-8", "replace").strip()
     return str(data).strip()
+
+
+def _read_bounded_path(path: Path) -> str:
+    """Read at most a bounded amount of output from a log file."""
+    try:
+        data = path.read_bytes()[:_MAX_OUTPUT_BYTES]
+    except (OSError, ValueError):
+        return ""
+    return data.decode("utf-8", "replace").strip()
+
+
+#: yt-dlp progress lines look like ``[download]  45.2% of ~123.45MiB ...``.
+_YTDLP_PROGRESS_RE = re.compile(r"\[download\]\s+(\d+(?:\.\d+)?)%")
+
+
+def _parse_yt_dlp_progress(log_path: Path) -> int | None:
+    """Return the latest download percentage from a yt-dlp stderr log.
+
+    Returns ``None`` when the log cannot be read or contains no progress line.
+    The percentage is rounded down to an integer.
+    """
+    try:
+        data = log_path.read_bytes()
+    except (OSError, ValueError):
+        return None
+    text = data.decode("utf-8", "replace")
+    last: int | None = None
+    for match in _YTDLP_PROGRESS_RE.finditer(text):
+        last = int(float(match.group(1)))
+    return last
 
 
 def build_acquirer(mode: str) -> SourceAcquirer:

@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import Link from "next/link";
 
+import Button from "@/components/ui/Button";
 import { ApiError, submitUpload, submitYouTube, type Job } from "@/lib/api";
 import { notifyJobsChanged } from "@/lib/jobs-event";
 
@@ -78,15 +80,13 @@ export default function VideoSourcePanel({
   );
 
   return (
-    <section
-      aria-labelledby="video-source-heading"
-      className="rounded-2xl border border-line bg-surface p-6 sm:p-8"
-    >
+    <section aria-labelledby="video-source-heading" className="card p-6 sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
+          <p className="eyebrow">Step 1</p>
           <h2
             id="video-source-heading"
-            className="text-lg font-semibold tracking-tight text-ink"
+            className="mt-2 text-lg font-semibold tracking-tight text-ink"
           >
             Add a video
           </h2>
@@ -99,15 +99,12 @@ export default function VideoSourcePanel({
             before anything else happens to it.
           </p>
         </div>
-        <span className="rounded-full border border-line-strong px-2.5 py-1 text-[10px] font-semibold tracking-wider text-ink-faint uppercase">
-          Phase 2
-        </span>
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         {/* Local file ------------------------------------------------------ */}
         <form
-          className="flex flex-col gap-3 rounded-xl border border-dashed border-line-strong bg-raised p-5"
+          className="group flex flex-col gap-3 rounded-xl border border-dashed border-line-strong bg-raised/60 p-5 transition-colors hover:border-ember-500/50"
           onSubmit={(event) => {
             event.preventDefault();
             const file = fileInput.current?.files?.[0];
@@ -123,6 +120,20 @@ export default function VideoSourcePanel({
           <p className="text-xs text-ink-faint">
             MP4, MOV, M4V, WebM or MKV. The file never leaves your machine.
           </p>
+          <label
+            htmlFor="video-file"
+            className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-line bg-canvas/60 px-4 py-5 text-center transition-colors group-hover:border-ember-500/40"
+          >
+            <span
+              aria-hidden="true"
+              className="text-base text-ink-faint transition-colors group-hover:text-ember-400"
+            >
+              ⬆
+            </span>
+            <span className="text-xs text-ink-muted">
+              Choose a file — or drop it here
+            </span>
+          </label>
           <input
             ref={fileInput}
             id="video-file"
@@ -130,21 +141,38 @@ export default function VideoSourcePanel({
             accept={ACCEPTED_TYPES}
             aria-label="Local video file"
             aria-describedby="video-file-help"
-            className="block w-full text-xs text-ink-faint file:mr-3 file:rounded-md file:border-0 file:bg-line-strong file:px-3 file:py-1.5 file:text-xs file:text-ink-muted"
+            className="sr-only"
           />
           <p id="video-file-help" className="sr-only">
             Choose a video file and press Upload to queue it for processing.
           </p>
-          <button
+          <Button
             type="submit"
+            variant="primary"
+            size="small"
             disabled={upload.phase === "uploading"}
-            className="mt-1 self-start rounded-lg bg-ember-500 px-4 py-2 text-xs font-semibold text-canvas transition-colors hover:bg-ember-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-1 self-start"
           >
             {upload.phase === "uploading" ? "Uploading…" : "Upload"}
-          </button>
+          </Button>
 
           {upload.phase === "uploading" && (
-            <p className="text-xs text-ink-muted" role="status">
+            <div
+              className="h-1 overflow-hidden rounded-full bg-line"
+              role="progressbar"
+              aria-valuenow={Math.round(upload.progress * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Upload progress"
+            >
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-ember-500 to-ember-400 transition-[width] duration-300"
+                style={{ width: `${Math.round(upload.progress * 100)}%` }}
+              />
+            </div>
+          )}
+          {upload.phase === "uploading" && (
+            <p className="numeric text-xs text-ink-muted" role="status">
               Uploading… {Math.round(upload.progress * 100)}%
             </p>
           )}
@@ -152,6 +180,14 @@ export default function VideoSourcePanel({
             <p className="text-xs text-ok" role="status">
               Queued as job {upload.job.id.slice(0, 8)}…
             </p>
+          )}
+          {upload.phase === "done" && (
+            <Link
+              href={`/jobs/${upload.job.id}`}
+              className="self-start rounded-lg border border-line-strong px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-ember-500 hover:text-ember-300"
+            >
+              Open the uploaded video
+            </Link>
           )}
           {upload.phase === "error" && (
             <p className="text-xs text-bad" role="alert">
@@ -162,7 +198,7 @@ export default function VideoSourcePanel({
 
         {/* YouTube link ---------------------------------------------------- */}
         <form
-          className="flex flex-col gap-3 rounded-xl border border-dashed border-line-strong bg-raised p-5"
+          className="flex flex-col gap-3 rounded-xl border border-dashed border-line-strong bg-raised/60 p-5 transition-colors focus-within:border-ember-500/50"
           onSubmit={handleLink}
         >
           <label htmlFor="youtube-url" className="text-sm font-medium text-ink">
@@ -194,18 +230,28 @@ export default function VideoSourcePanel({
             />
             I own this video or have permission to download and reuse it.
           </label>
-          <button
+          <Button
             type="submit"
+            variant="primary"
+            size="small"
             disabled={link.phase === "submitting" || !linkUrl || !authorized}
-            className="mt-1 self-start rounded-lg bg-ember-500 px-4 py-2 text-xs font-semibold text-canvas transition-colors hover:bg-ember-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-1 self-start"
           >
             {link.phase === "submitting" ? "Submitting…" : "Add link"}
-          </button>
+          </Button>
 
           {link.phase === "done" && (
             <p className="text-xs text-ok" role="status">
               Queued as job {link.job.id.slice(0, 8)}…
             </p>
+          )}
+          {link.phase === "done" && (
+            <Link
+              href={`/jobs/${link.job.id}`}
+              className="self-start rounded-lg border border-line-strong px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-ember-500 hover:text-ember-300"
+            >
+              Open the linked video
+            </Link>
           )}
           {link.phase === "error" && (
             <p className="text-xs text-bad" role="alert">

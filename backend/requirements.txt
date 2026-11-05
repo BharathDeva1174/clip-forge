@@ -1,10 +1,20 @@
 # ClipForge API runtime dependencies.
 # Install with:  pip install -r requirements.txt
-# Pinned to the versions verified in Phase 2 (Python 3.11+).
+# Pinned to the versions verified in Phase 3 (Python 3.11+).
 
 fastapi==0.150.0
 uvicorn[standard]==0.54.0
 pydantic-settings==2.16.0
+
+# The HTTP client used to talk to AI providers. It is the same client the
+# test suite already used, so the transport can be mocked deterministically
+# and no provider call ever needs a real credential in a test.
+httpx2==2.15.1
+
+# The operating system's credential store. An API key is filed there and
+# only a reference to it is kept in SQLite, so the database never holds a
+# secret and a backup of it never contains one.
+keyring==25.7.0
 
 # Multipart parsing. Starlette's own parser spools the whole file to a
 # temporary file before the endpoint runs and has no limit on file part size,
@@ -16,3 +26,10 @@ python-multipart==0.0.32
 # `python -m yt_dlp` and is only used for URLs that have already passed strict
 # hostname and format validation.
 yt-dlp==2026.8.19
+
+# The local speech-to-text engine. It runs Whisper models entirely on this
+# machine: no audio, no transcript and no request ever leaves it. The model
+# weights are downloaded once into the model cache and then used offline.
+#
+# It pulls in ctranslate2, huggingface-hub, tokenizers, onnxruntime and av.
+faster-whisper==1.2.1

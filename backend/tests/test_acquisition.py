@@ -184,12 +184,22 @@ def test_a_download_that_exceeds_the_limit_is_rejected(
 ) -> None:
     import app.acquisition as acquisition_module
 
+    def fake_popen(args, **kwargs):  # noqa: ANN001, ANN003
+        process = FakeProcess()
+        # An oversized download leaves an oversized file behind.
+        target = tmp_path / "big.mp4"
+        target.write_bytes(b"0" * 4096)
+        return process
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    original = acquisition_module.YtDlpAcquirer._find_downloaded_file
+
     def find_big(directory: Path) -> Path | None:
         candidate = directory / "big.mp4"
         candidate.write_bytes(b"0" * 4096)
         return candidate
 
-    original = acquisition_module.YtDlpAcquirer._find_downloaded_file
     acquisition_module.YtDlpAcquirer._find_downloaded_file = staticmethod(find_big)
     try:
         acquirer = YtDlpAcquirer()

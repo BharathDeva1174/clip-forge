@@ -3,3 +3,6 @@ minversion = "7.0"
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q --strict-markers"
+markers = [
+    "real_model: tests that load the real local speech model; they are skipped unless the model is already cached",
+]

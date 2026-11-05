@@ -19,25 +19,28 @@ const STEPS: PipelineStep[] = [
     title: "Transcribe",
     body: "Pull the audio track out of the video and turn the speech into a timed transcript.",
     phase: "Phase 3",
-    state: "next",
+    state: "done",
   },
   {
     id: 3,
     title: "Find highlights",
     body: "An LLM reads the transcript and proposes the moments worth turning into clips.",
     phase: "Phase 4",
+    state: "done",
   },
   {
     id: 4,
     title: "Render clips",
     body: "FFmpeg cuts each highlighted moment into a standalone clip on local disk.",
     phase: "Phase 5",
+    state: "done",
   },
   {
     id: 5,
     title: "Format & caption",
-    body: "Convert to 9:16, burn in synchronised subtitles and export for each platform.",
+    body: "Convert the clip to 9:16 and burn the transcript's captions into the picture.",
     phase: "Phase 6",
+    state: "done",
   },
 ];
 

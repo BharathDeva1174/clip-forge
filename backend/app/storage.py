@@ -6,6 +6,8 @@ Everything the application writes lives under a single storage root:
         uploads/    in-flight uploads (partial files)
         sources/    accepted source videos
         temp/       scratch space used by the worker
+        clips/      rendered clips
+        formats/    rendered portrait (9:16) clips
         database/   the SQLite database
 
 The database stores paths *relative* to that root. Every path is resolved and
@@ -55,6 +57,8 @@ class Storage:
         self.uploads_dir = self.root / "uploads"
         self.sources_dir = self.root / "sources"
         self.temp_dir = self.root / "temp"
+        self.clips_dir = self.root / "clips"
+        self.formats_dir = self.root / "formats"
         self.database_dir = self.root / "database"
 
     def ensure_layout(self) -> None:
@@ -64,6 +68,8 @@ class Storage:
             self.uploads_dir,
             self.sources_dir,
             self.temp_dir,
+            self.clips_dir,
+            self.formats_dir,
             self.database_dir,
         ):
             directory.mkdir(parents=True, exist_ok=True)
@@ -114,3 +120,31 @@ class Storage:
         """Return a fresh path inside the scratch directory."""
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         return self.temp_dir / f"{uuid.uuid4().hex}{suffix}"
+
+    def new_clip_path(self, clip_id: str) -> Path:
+        """Return the final path of a clip.
+
+        The name is built from the clip's own id, so it is controlled by
+        ClipForge and never by a client or by a source filename.
+        """
+        self.clips_dir.mkdir(parents=True, exist_ok=True)
+        return self.clips_dir / f"{clip_id}.mp4"
+
+    def new_format_path(self, format_id: str) -> Path:
+        """Return the final path of a formatted clip.
+
+        As with a clip, the name comes from the artifact's own id.
+        """
+        self.formats_dir.mkdir(parents=True, exist_ok=True)
+        return self.formats_dir / f"{format_id}.mp4"
+
+    def new_format_work_dir(self, format_id: str, attempt: int) -> Path:
+        """Return a scratch directory for one formatting attempt.
+
+        The directory is named after the artifact and the attempt, so two
+        attempts never share one, and a stale worker cannot remove the files
+        of a newer attempt.
+        """
+        path = self.temp_dir / f"format-{format_id}-{attempt}"
+        path.mkdir(parents=True, exist_ok=True)
+        return path

@@ -205,7 +205,9 @@ def test_a_cancelled_job_cannot_be_requeued() -> None:
         (JobStatus.QUEUED, JobStatus.DOWNLOADING),
         (JobStatus.VALIDATING, JobStatus.INSPECTING),
         (JobStatus.DOWNLOADING, JobStatus.INSPECTING),
-        (JobStatus.INSPECTING, JobStatus.COMPLETED),
+        (JobStatus.INSPECTING, JobStatus.EXTRACTING_AUDIO),
+        (JobStatus.EXTRACTING_AUDIO, JobStatus.TRANSCRIBING),
+        (JobStatus.TRANSCRIBING, JobStatus.COMPLETED),
         (JobStatus.QUEUED, JobStatus.FAILED),
     ],
 )
@@ -213,6 +215,13 @@ def test_the_allowed_transitions_are_permitted(
     current: JobStatus, new: JobStatus
 ) -> None:
     assert_transition(current, new)
+
+
+def test_a_job_cannot_be_completed_without_being_transcribed() -> None:
+    # Since Phase 3 a job has to pass through the transcription stages, so
+    # `completed` always implies that a transcript was committed.
+    with pytest.raises(InvalidTransitionError):
+        assert_transition(JobStatus.INSPECTING, JobStatus.COMPLETED)
 
 
 def test_an_illegal_transition_is_rejected_by_the_database_layer(
@@ -249,3 +258,209 @@ def test_progress_is_always_within_the_allowed_range(db: sqlite3.Connection) -> 
 
     job = get_job(db, job_id)
     assert 0 <= job.progress <= 100
+
+
+# --- deletion ----------------------------------------------------------------
+
+
+def _finish_job_tree(
+    conn: sqlite3.Connection,
+    storage_root,
+    job_id: str = "c" * 32,
+) -> dict[str, str]:
+    """A completed job with a source file, a clip file and a format file.
+
+    The clip and the format walk their legal transitions, the way the
+    worker would. Returns the relative paths that were created.
+    """
+    from app.clips import ClipStatus
+    from app.db import (
+        create_clip,
+        create_format,
+        update_clip,
+        update_format,
+        update_job,
+    )
+
+    _make_job(conn, job_id)
+    for status, stage in (
+        (JobStatus.VALIDATING, JobStage.VALIDATING),
+        (JobStatus.INSPECTING, JobStage.INSPECTING),
+        (JobStatus.EXTRACTING_AUDIO, JobStage.EXTRACTING_AUDIO),
+        (JobStatus.TRANSCRIBING, JobStage.TRANSCRIBING),
+        (JobStatus.COMPLETED, JobStage.READY),
+    ):
+        update_job(conn, job_id, status=status, stage=stage)
+
+    create_clip(
+        conn,
+        job_id=job_id,
+        analysis_id=None,
+        candidate_id=None,
+        start_seconds=0.0,
+        end_seconds=2.0,
+        clip_id="e" * 32,
+    )
+    for status, stage, progress in (
+        (ClipStatus.RENDERING, "rendering", 40),
+        (ClipStatus.VERIFYING, "verifying", 85),
+    ):
+        update_clip(conn, "e" * 32, status=status, stage=stage, progress=progress)
+    update_clip(
+        conn,
+        "e" * 32,
+        status=ClipStatus.COMPLETED,
+        stage="completed",
+        progress=100,
+        output_path="clips/clip-out.mp4",
+        output_size_bytes=10,
+        actual_duration_seconds=2.0,
+        width=64,
+        height=64,
+        video_codec="h264",
+        audio_codec="aac",
+        clear_error=True,
+    )
+
+    create_format(
+        conn,
+        clip_id="e" * 32,
+        job_id=job_id,
+        config_fingerprint="fp",
+        settings_json="{}",
+        format_id="f" * 32,
+    )
+    for status, stage, progress in (
+        (ClipStatus.RENDERING, "rendering", 40),
+        (ClipStatus.VERIFYING, "verifying", 85),
+    ):
+        update_format(conn, "f" * 32, status=status, stage=stage, progress=progress)
+    update_format(
+        conn,
+        "f" * 32,
+        status=ClipStatus.COMPLETED,
+        stage="completed",
+        progress=100,
+        output_path="formats/format-out.mp4",
+        output_size_bytes=10,
+        actual_duration_seconds=2.0,
+        width=64,
+        height=128,
+        video_codec="h264",
+        audio_codec="aac",
+        clear_error=True,
+    )
+
+    paths = {}
+    for relative in (
+        "sources/clip.mp4",
+        "clips/clip-out.mp4",
+        "formats/format-out.mp4",
+    ):
+        file_path = storage_root / relative
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_bytes(b"x" * 16)
+        paths[relative] = str(file_path)
+    return paths
+
+
+def test_a_finished_job_can_be_deleted_with_its_files(
+    client: TestClient, db: sqlite3.Connection, settings
+) -> None:
+    from app.db import get_transcript, save_transcript
+    from app.transcripts import Transcript
+
+    files = _finish_job_tree(db, settings.storage_root)
+    save_transcript(
+        db,
+        job_id="c" * 32,
+        transcript=Transcript(
+            language="en",
+            model_name="tiny.en",
+            audio_sample_rate=16000,
+            audio_channels=1,
+            duration_seconds=2.0,
+            segments=(),
+        ),
+    )
+    temp_root = settings.storage_root / "temp"
+    (temp_root / f"yt-{'c' * 32}").mkdir(parents=True)
+    (temp_root / f"yt-{'c' * 32}" / "part.mp4").write_bytes(b"p")
+    (temp_root / f"format-{'f' * 32}-1").mkdir(parents=True)
+
+    response = client.delete("/api/v1/jobs/" + "c" * 32)
+
+    assert response.status_code == 204
+    with session(settings.resolved_database_path) as conn:
+        assert get_job(conn, "c" * 32) is None
+        assert get_transcript(conn, "c" * 32) is None
+        assert conn.execute("SELECT COUNT(*) FROM clips").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM clip_formats").fetchone()[0] == 0
+    for file_path in files.values():
+        assert not Path(file_path).exists()
+    assert not (temp_root / f"yt-{'c' * 32}").exists()
+    assert not (temp_root / f"format-{'f' * 32}-1").exists()
+
+
+def test_a_job_that_has_not_finished_cannot_be_deleted(
+    client: TestClient, db: sqlite3.Connection, settings
+) -> None:
+    _make_job(db)
+
+    response = client.delete("/api/v1/jobs/" + "a" * 32)
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error"]["code"] == ErrorCode.JOB_NOT_DELETABLE.value
+    with session(settings.resolved_database_path) as conn:
+        assert get_job(conn, "a" * 32) is not None
+
+
+def test_a_cancelled_job_can_be_deleted(
+    client: TestClient, db: sqlite3.Connection, settings
+) -> None:
+    from app.db import cancel_job
+
+    _make_job(db)
+    cancel_job(db, "a" * 32)
+
+    response = client.delete("/api/v1/jobs/" + "a" * 32)
+
+    assert response.status_code == 204
+    with session(settings.resolved_database_path) as conn:
+        assert get_job(conn, "a" * 32) is None
+
+
+def test_deleting_a_missing_job_returns_404(client: TestClient) -> None:
+    response = client.delete("/api/v1/jobs/" + "9" * 32)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == ErrorCode.NOT_FOUND.value
+
+
+def test_deletion_never_removes_a_path_outside_the_storage_root(
+    client: TestClient, db: sqlite3.Connection, settings
+) -> None:
+    """An escaped path in the database is skipped, not followed."""
+    from app.db import update_job
+
+    _make_job(db)
+    for status, stage in (
+        (JobStatus.VALIDATING, JobStage.VALIDATING),
+        (JobStatus.INSPECTING, JobStage.INSPECTING),
+        (JobStatus.EXTRACTING_AUDIO, JobStage.EXTRACTING_AUDIO),
+        (JobStatus.TRANSCRIBING, JobStage.TRANSCRIBING),
+        (JobStatus.COMPLETED, JobStage.READY),
+    ):
+        update_job(db, "a" * 32, status=status, stage=stage)
+    db.execute(
+        "UPDATE jobs SET source_path = '../escaped.mp4' WHERE id = ?", ("a" * 32,)
+    )
+    outside = settings.storage_root.parent / "escaped.mp4"
+    outside.write_bytes(b"keep me")
+
+    response = client.delete("/api/v1/jobs/" + "a" * 32)
+
+    assert response.status_code == 204
+    assert outside.exists()
+    outside.unlink()

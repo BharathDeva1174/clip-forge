@@ -67,7 +67,9 @@ async def upload_video(
     except UploadError as exc:
         raise ApiError(exc.status_code, exc.code, exc.message) from exc
 
-    # From here on the file exists on disk. Every failure path removes it.
+    # From here on the file exists on disk. Every failure path removes it,
+    # including the unexpected ones: an accepted file always belongs to a
+    # job, so a file without a job is always a leftover.
     try:
         info = inspect_media(
             received.path,
@@ -83,6 +85,9 @@ async def upload_video(
     except MediaError as exc:
         received.path.unlink(missing_ok=True)
         raise ApiError(415, exc.code, exc.message) from exc
+    except Exception:
+        received.path.unlink(missing_ok=True)
+        raise
 
     storage.sources_dir.mkdir(parents=True, exist_ok=True)
     final_path = storage.sources_dir / storage.new_source_name(received.extension)

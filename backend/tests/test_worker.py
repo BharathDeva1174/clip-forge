@@ -28,6 +28,7 @@ from app.errors import ErrorCode
 from app.jobs import JobStage, JobStatus, SourceType
 from app.storage import Storage
 from app.worker import Worker
+from fakes import FakeTranscriber
 
 
 class FakeAcquirer:
@@ -63,8 +64,19 @@ def _upload(client: TestClient, sample_video: Path) -> str:
     return response.json()["id"]
 
 
-def _worker(settings: Settings, acquirer=None) -> Worker:
-    return Worker(settings, worker_id="test-worker", acquirer=acquirer)
+def _worker(settings: Settings, acquirer=None, transcriber=None) -> Worker:
+    """Build a worker with a faked speech engine.
+
+    The speech model is never loaded by the ordinary test suite: it is
+    faked, so the tests are fast, deterministic and need no network. The real
+    engine has its own opt-in integration test.
+    """
+    return Worker(
+        settings,
+        worker_id="test-worker",
+        acquirer=acquirer,
+        transcriber=transcriber if transcriber is not None else FakeTranscriber(),
+    )
 
 
 # --- processing -------------------------------------------------------------

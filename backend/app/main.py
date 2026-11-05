@@ -23,22 +23,36 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.ai_client import AiClient
 from app.config import API_STAGE, API_VERSION, SERVICE_NAME, Settings, get_settings
+from app.credentials import DEFAULT_STORE
 from app.deps import get_db  # noqa: F401 - imported so the dependency is registered
 from app.errors import ApiError, ErrorCode, error_payload
 from app.logging_config import configure_logging
-from app.routers import api, health, jobs, videos
+from app.routers import (
+    api,
+    clips,
+    formats,
+    health,
+    highlights,
+    integrations,
+    jobs,
+    videos,
+)
 from app.storage import Storage
 
 API_TITLE = "ClipForge API"
 API_DESCRIPTION = (
     "Local-first API that turns long-form videos into short-form clips for "
     "YouTube Shorts, Instagram Reels and TikTok.\n\n"
-    f"**Project stage:** `{API_STAGE}`. This build accepts video uploads and "
-    "authorised YouTube URLs, stores them and processes them in a separate "
-    "background worker. Transcription, AI highlight detection, clip rendering "
-    "and captions are planned for later phases and are reported as disabled "
-    "by `/ready`."
+    f"**Project stage:** `{API_STAGE}`.\n\n"
+    "This build accepts video uploads and authorised YouTube URLs, stores them, "
+    "extracts their audio with FFmpeg and transcribes that audio with a local "
+    "speech-to-text model in a separate background worker. It detects highlights "
+    "with the provider the user configures, renders clips from the accepted "
+    "candidates, converts a clip to portrait with burned-in captions, and "
+    "exports finished clips as a streamed ZIP. `/ready` reports what is "
+    "available in this particular installation."
 )
 
 logger = logging.getLogger("clipforge.api")
@@ -124,6 +138,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     storage.ensure_layout()
     app.state.settings = settings
     app.state.storage = storage
+    # The provider client and the credential store live on the application
+    # state, so a test can put a mocked client and an in-memory credential
+    # store in their place.
+    app.state.ai_client = AiClient(
+        timeout_seconds=settings.ai_request_timeout_seconds,
+        max_retries=settings.ai_max_retries,
+    )
+    app.state.credential_store = DEFAULT_STORE
 
     # The limit applies to the whole request body. The multipart envelope adds
     # a little overhead on top of the file itself, so allow for that.
@@ -190,6 +212,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(api.router)
     app.include_router(jobs.router)
     app.include_router(videos.router)
+    app.include_router(integrations.router)
+    app.include_router(highlights.router)
+    app.include_router(clips.router)
+    app.include_router(formats.router)
 
     logger.info(
         "%s %s ready (service=%s, stage=%s, cors=%s, storage=%s)",
