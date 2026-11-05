@@ -106,9 +106,13 @@ Run every command from the repository root unless a comment says otherwise.
 ### 0. Get the code
 
 ```powershell
-git clone https://github.com/BharathDeva1174/clip-forge.git
-cd clip-forge
+git clone https://github.com/BharathDeva1174/clip-forge.git clipforge
+cd clipforge
 ```
+
+The clone is given the folder name `clipforge` because every command in this
+repository's documentation assumes it. Any other name works too, as long as you
+run the commands from inside the folder you chose.
 
 The repository carries source and documentation only — no media, no database,
 no model weights, no environment files. See [QUICK_START.md](QUICK_START.md) for
@@ -333,6 +337,59 @@ remote AI endpoint, and only when you request highlight detection.
 
 ---
 
+## If the pipeline fights you, let your coding agent drive it
+
+The dashboard is not the only way in. Everything it does is an HTTP call to
+`http://127.0.0.1:8000`, and the repository ships [AGENTS.md](AGENTS.md) — the
+file coding agents read first — with the rules that make those calls safe: the
+worker owns all media work, a child process's output goes to a file rather than
+a pipe, and the test suite is never run alongside the e2e scripts. So any agent
+that can run shell commands can take one video all the way to finished clips
+while you do something else.
+
+Open the cloned folder in your agent (Qoder, Claude Code, Cursor, Codex CLI or
+similar) and put the link and the destination in the same request:
+
+```text
+Process this video with ClipForge: https://youtu.be/<id> — I am authorised to use it.
+
+1. Start the API and the worker (scripts\start-local.ps1, or run.py and
+   worker.py) and confirm http://127.0.0.1:8000/ready says the worker is running.
+2. POST the YouTube URL, then poll the job until the transcript is stored.
+3. Queue the highlight analysis, read the candidates, accept the ones that are
+   genuinely strong and say in one line why.
+4. Render each accepted clip, then its 9:16 captioned version.
+5. Copy the finished files to D:\Clips and report the paths you wrote.
+```
+
+What that actually buys you, and what it does not:
+
+- **The agent can** start the services, submit the job, wait through
+  transcription, pick candidates, render, let the worker verify each output
+  with FFprobe, retry a clip that failed, and copy the results to whatever
+  folder you name — ClipForge keeps its own copies under
+  `backend/data/clips/` and `backend/data/formats/`, and
+  `CLIPFORGE_STORAGE_DIR` moves that root.
+- **Nothing magical replaces the prerequisites.** FFmpeg must be on `PATH`, the
+  worker must be running (`/ready` reports both), and the URL has to be one you
+  are authorised to use — the API refuses a submission unless `authorized` is
+  `true`, and an agent filling that field in on your behalf still needs you to
+  have said so.
+- **Moment selection needs a provider.** With no integration configured,
+  transcription, cutting, captioning, formatting and export all still work; you
+  choose the boundaries and the agent renders exactly what you specify.
+- **Do not paste your API key into the chat.** The key belongs in the OS
+  credential store — save it once from the Integrations page (or via
+  `POST /api/v1/integrations/{id}/key`) and tell the agent to use the existing
+  default. A key in a prompt, a transcript or a `.env` file is a key that has
+  already left your machine, and this repository's history is public.
+- **When a run fails, the agent should read, not restart.** `/ready`, the API
+  and worker logs under `$env:TEMP\clipforge-local-launch\`, and each record's
+  stable `error_code` say what happened; the leases make a job that was
+  interrupted safe to pick up again without touching the database.
+
+---
+
 ## Where data is stored
 
 Everything lives under `CLIPFORGE_STORAGE_DIR` (default `backend/data`):
@@ -363,8 +420,9 @@ containment check.
   used as paths.
 - Subprocesses use argument arrays (`shell=False`), timeouts, and
   terminate-then-kill-reap.
-- AI transport requires HTTPS for remote, refuses redirects, bounds request
-  and response, and never leaks the key or the provider's error body.
+- The AI transport requires HTTPS for remote hosts, refuses redirects, bounds
+  the request and the response, and never leaks the key or the provider's
+  error body.
 
 ---
 
@@ -376,7 +434,7 @@ containment check.
 | `ffprobe` / `ffmpeg` not found | Install FFmpeg and reopen the terminal so PATH updates. |
 | Port already in use | Change `CLIPFORGE_PORT` / the frontend port, or stop the other process. |
 | Worker not running (`/ready` shows `running: false`) | Start `python worker.py` from `backend/`. |
-| Transcription model not cached | Run the cache command in §1.2, or allow the first run to download (offline mode off). |
+| Transcription model not cached | Run the cache command in **The speech model** under First-time setup, or allow the first run to download (offline mode off). |
 | `CLIPFORGE_TRANSCRIPTION_OFFLINE=true` with missing model | Set offline false, cache the model, then re-enable. |
 | Database migration failure | Check logs; restore from a backup of `data/database/`. Never delete the live DB to "fix" it — use a temp storage root for tests. |
 | Credential store unavailable | Ensure the OS keyring is usable (Windows Credential Manager). |
@@ -413,7 +471,7 @@ skips unless the model is already cached.
 ## Known limitations
 
 - No repeatable browser automation is available on this install (no
-  Playwright/Cypress/Selenium; the built-in preview cannot attach). UI was
+  Playwright/Cypress/Selenium; the built-in preview cannot attach). The UI was
   verified over HTTP and via component tests.
 - Cancellation stops the work, not only the bookkeeping (decision D55): a
   cancelled job fails its queued clips, formats and analyses in the same

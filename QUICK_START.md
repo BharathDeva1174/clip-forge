@@ -33,9 +33,13 @@ Then **reopen the terminal** so the new `PATH` is picked up.
 ## 2. Clone
 
 ```bash
-git clone https://github.com/BharathDeva1174/clip-forge.git
-cd clip-forge
+git clone https://github.com/BharathDeva1174/clip-forge.git clipforge
+cd clipforge
 ```
+
+The clone is named `clipforge` here because the rest of the documentation uses
+that name in its examples; the application does not care what the folder is
+called.
 
 Prefer no Git? **Code → Download ZIP** on the repository page, then unzip into
 a folder named `clipforge`. Everything below is identical.
@@ -209,6 +213,16 @@ recovery test fails under CPU contention.
 
 A stale or interrupted job is not lost: expired leases are recovered by the next
 worker, and cancelling is always available for work that has not finished.
+
+**Rather than driving this yourself, hand it to a coding agent.** Open the
+cloned folder in Qoder, Claude Code, Cursor or a similar agent and give it the
+YouTube link plus the folder you want the clips in — the agent starts the API
+and the worker, submits the job, waits for the transcript, picks the moments,
+renders the vertical captioned versions and copies the finished files to the
+place you named. [README.md — If the pipeline fights
+you](README.md#if-the-pipeline-fights-you-let-your-coding-agent-drive-it) says
+what the agent still needs from you (FFmpeg, a running worker, a provider for
+moment selection, and **never** your API key in the chat).
 
 ---
 
